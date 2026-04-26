@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI Golf Coach</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1a3a2a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Golf Coach">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
@@ -184,6 +189,7 @@
     font-size: 0.8rem; letter-spacing:0.04em;
     border: none; border-radius:6px;
     padding: 0.6rem 1.2rem;
+    min-height: 44px;
     cursor: pointer; transition: all 0.15s;
     text-transform: uppercase;
   }
@@ -199,6 +205,8 @@
     cursor:pointer; font-size:0.8rem;
     letter-spacing:0.04em; text-transform:uppercase;
     transition: background 0.15s;
+    min-height: 44px;
+    display: inline-flex; align-items: center;
   }
   .upload-label:hover { background:var(--green-light); }
   #fileInput { display:none; }
@@ -348,6 +356,25 @@
   .deviation-body { display:none; padding:0.6rem 0.75rem; font-size:0.7rem; color:var(--text-muted); background:#162e20; line-height:1.6; }
   .deviation-item.open .deviation-body { display:block; }
 
+  /* ── Camera off overlay ── */
+  .camera-off-overlay {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 0.6rem;
+    background: #0a1a12;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-align: center;
+  }
+  .camera-off-overlay.show { display: flex; }
+
+  #cameraToggleBtn { background: #1f4430; color: var(--cream); }
+  #cameraToggleBtn:hover { background: #2a5a3f; }
+  #cameraToggleBtn.camera-off { background: rgba(201,168,76,0.12); color: var(--gold); border: 1px solid rgba(201,168,76,0.3); }
+  #cameraToggleBtn.camera-off:hover { background: rgba(201,168,76,0.2); }
+
   /* ── Misc ── */
   .spinner {
     display:inline-block; width:14px; height:14px;
@@ -361,6 +388,22 @@
     .main-layout { grid-template-columns:1fr; }
     .left-panel { border-right:none; border-bottom:1px solid var(--green-mid); }
     .right-panel { min-height:400px; }
+  }
+
+  @media (max-width:600px) {
+    header { padding: 0.75rem 1rem; }
+    header h1 { font-size: 1.1rem; }
+    .left-panel { padding: 0.875rem 1rem; gap: 0.75rem; }
+    .club-desc { display: none; }
+    .club-card { padding: 0.7rem 0.75rem; }
+    .controls { gap: 0.5rem; }
+    #recordBtn { flex: 1; }
+    .upload-label { flex: 1; justify-content: center; }
+    #analysisBtn { width: 100%; margin-left: 0; }
+    .results-content { padding: 1rem; gap: 1.25rem; }
+    .radar-wrap { height: 180px; }
+    .feat-label { width: 70px; font-size: 0.6rem; }
+    .right-panel { min-height: 500px; }
   }
 </style>
 </head>
@@ -420,6 +463,15 @@
         <div class="rec-dot"></div> REC
       </div>
       <div class="countdown" id="countdown"></div>
+      <div class="camera-off-overlay" id="cameraOffOverlay">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+          <line x1="4" y1="4" x2="32" y2="32" stroke="#9bb5a5" stroke-width="2" stroke-linecap="round"/>
+          <path d="M7 10a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16M11 8h15a2 2 0 0 1 2 2v9" stroke="#9bb5a5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M26 18l6-3v10l-6-3" stroke="#9bb5a5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Camera is off</span>
+        <span style="font-size:0.65rem;color:#5a8a6a">Upload a video to still analyze your swing</span>
+      </div>
     </div>
 
     <!-- Controls -->
@@ -428,6 +480,7 @@
       <button id="stopBtn">&#9632; Stop</button>
       <label class="upload-label" for="fileInput">&#8679; Upload Video</label>
       <input type="file" id="fileInput" accept="video/*">
+      <button id="cameraToggleBtn">&#9646;&#9646; Camera Off</button>
       <button id="analysisBtn">Analyze &rarr;</button>
     </div>
 
@@ -531,6 +584,7 @@ let liveFrames      = [];
 let lastVideoTime   = -1;
 let animFrameId     = null;
 let radarChartInst  = null;
+let cameraEnabled   = false;
 
 const MAX_RECORDING_SECONDS = 10;
 
@@ -549,8 +603,10 @@ const fileInput     = document.getElementById("fileInput");
 const recOverlay    = document.getElementById("recOverlay");
 const countdownEl   = document.getElementById("countdown");
 const logBox        = document.getElementById("logBox");
-const resultsPlaceholder = document.getElementById("resultsPlaceholder");
-const resultsContent     = document.getElementById("resultsContent");
+const resultsPlaceholder  = document.getElementById("resultsPlaceholder");
+const resultsContent      = document.getElementById("resultsContent");
+const cameraToggleBtn     = document.getElementById("cameraToggleBtn");
+const cameraOffOverlay    = document.getElementById("cameraOffOverlay");
 
 // ─────────────────────────────────────────
 //  Logging
@@ -1002,7 +1058,7 @@ async function startCamera() {
       poseCanvas.width  = videoEl.videoWidth;
       poseCanvas.height = videoEl.videoHeight;
       startPoseLoop();
-    });
+    }, { once: true });
     log("Camera started", "ok");
   } catch(e) {
     log(`Camera error: ${e.message}`, "err");
@@ -1040,6 +1096,10 @@ function startPoseLoop() {
   animFrameId = requestAnimationFrame(loop);
   recordBtn.disabled = false;
   setStatus("ready", "Ready");
+  cameraEnabled = true;
+  cameraOffOverlay.classList.remove("show");
+  cameraToggleBtn.textContent = "⏸ Camera Off";
+  cameraToggleBtn.classList.remove("camera-off");
 }
 
 // ─────────────────────────────────────────
@@ -1068,6 +1128,33 @@ function stopRecording() {
   log(`Captured ${liveFrames.length} frames`, liveFrames.length>=20?"ok":"warn");
   if (liveFrames.length >= 20) analysisBtn.classList.add("show");
   else { log("Too few frames — try again in better lighting","err"); recordBtn.disabled=false; }
+}
+
+// ─────────────────────────────────────────
+//  Camera toggle
+// ─────────────────────────────────────────
+function stopCamera() {
+  if (isRecording) stopRecording();
+  if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  videoEl.srcObject = null;
+  ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
+  cameraEnabled = false;
+  recordBtn.disabled = true;
+  cameraOffOverlay.classList.add("show");
+  cameraToggleBtn.textContent = "▶ Camera On";
+  cameraToggleBtn.classList.add("camera-off");
+  setStatus("", "Camera off");
+  log("Camera off");
+}
+
+async function toggleCamera() {
+  if (cameraEnabled) {
+    stopCamera();
+  } else {
+    log("Starting camera...");
+    await startCamera();
+  }
 }
 
 // ─────────────────────────────────────────
@@ -1199,6 +1286,14 @@ async function runAnalysis() {
     const coaching = await resp.json();
     renderCoaching(coaching);
     log("Coaching received", "ok");
+    if (coaching.from_cache) log("Response served from cache", "ok");
+    if (coaching.limit_reached) {
+      showToast("Daily limit reached. Come back tomorrow.");
+    } else if (coaching.calls_remaining === 1) {
+      showToast("Last free analysis today.");
+    } else if (coaching.calls_remaining === 2) {
+      showToast("2 free analyses remaining today.");
+    }
   } catch(e) {
     log(`Coaching error: ${e.message}`,"err");
     document.getElementById("coachingCards").innerHTML=`<div style="font-size:0.75rem;color:var(--text-muted)">Coaching unavailable: ${e.message}</div>`;
@@ -1222,10 +1317,34 @@ function renderCoaching(coaching) {
 }
 
 // ─────────────────────────────────────────
+//  Toast
+// ─────────────────────────────────────────
+function showToast(message) {
+  const existing = document.getElementById("toast");
+  if (existing) existing.remove();
+  const toast = document.createElement("div");
+  toast.id = "toast";
+  toast.textContent = message;
+  toast.style.cssText = [
+    "position:fixed", "bottom:24px", "left:50%",
+    "transform:translateX(-50%)",
+    "background:rgba(0,0,0,0.82)", "color:white",
+    "padding:10px 22px", "border-radius:20px",
+    "font-size:13px", "font-family:DM Mono,monospace",
+    "z-index:9999", "pointer-events:none",
+    "transition:opacity 0.3s",
+  ].join(";");
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity = "0"; }, 2500);
+  setTimeout(() => { toast.remove(); }, 3000);
+}
+
+// ─────────────────────────────────────────
 //  Events
 // ─────────────────────────────────────────
 recordBtn.addEventListener("click", startRecording);
 stopBtn.addEventListener("click", stopRecording);
+cameraToggleBtn.addEventListener("click", toggleCamera);
 analysisBtn.addEventListener("click", runAnalysis);
 fileInput.addEventListener("change", async e => {
   const f=e.target.files[0]; if(f) await processUploadedVideo(f); fileInput.value="";
