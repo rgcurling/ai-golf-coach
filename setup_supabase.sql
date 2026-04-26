@@ -29,6 +29,10 @@ create table if not exists daily_usage (
   primary key (user_ip, usage_date)
 );
 
+-- Per-club model support (run if upgrading from earlier version)
+alter table swings add column if not exists club_category text;
+alter table swings add column if not exists tempo_ratio float;
+
 -- Atomic increment function for rate limiting
 create or replace function increment_usage(p_ip text, p_date date)
 returns integer as $$
