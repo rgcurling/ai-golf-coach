@@ -22,15 +22,15 @@ ROOT = Path(__file__).parent
 app = Flask(__name__, static_folder=str(ROOT))
 CORS(app)
 
-# Rate limiting: max 10 requests per IP per hour (in-memory, resets on restart)
-RATE_LIMIT = 10
-RATE_WINDOW = 3600  # seconds
+RATE_LIMIT  = 10
+RATE_WINDOW = 3600
 _rate_buckets: dict[str, list[float]] = defaultdict(list)
 
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
 SYSTEM_PROMPT = """You are a PGA-certified golf instructor analyzing a student's swing biomechanics data.
-You will receive structured data showing how their swing deviates from professional benchmarks.
+You will receive structured data showing how their swing deviates from professional benchmarks for a specific club.
+Tailor your advice to the club being used — driver swings require more rotation and wider arc, iron swings require steeper attack angle and shaft lean.
 Respond with exactly 3 coaching points, one per deviation, in this JSON format:
 {
   "coaching": [
@@ -43,7 +43,6 @@ Respond with exactly 3 coaching points, one per deviation, in this JSON format:
 
 
 def check_rate_limit(ip: str) -> bool:
-    """Returns True if request is allowed, False if rate limit exceeded."""
     now = time.time()
     window_start = now - RATE_WINDOW
     _rate_buckets[ip] = [t for t in _rate_buckets[ip] if t > window_start]
@@ -59,11 +58,25 @@ def serve_index():
 
 
 @app.route("/reference_model.json")
-def serve_model():
-    model_path = ROOT / "reference_model.json"
-    if not model_path.exists():
-        return jsonify({"error": "reference_model.json not found. Run build_reference_model.py first."}), 404
-    return send_from_directory(str(ROOT), "reference_model.json")
+def serve_model_combined():
+    return _serve_model_file("reference_model.json")
+
+
+@app.route("/reference_model_driver.json")
+def serve_model_driver():
+    return _serve_model_file("reference_model_driver.json")
+
+
+@app.route("/reference_model_iron.json")
+def serve_model_iron():
+    return _serve_model_file("reference_model_iron.json")
+
+
+def _serve_model_file(filename: str):
+    path = ROOT / filename
+    if not path.exists():
+        return jsonify({"error": f"{filename} not found. Run build_reference_model.py first."}), 404
+    return send_from_directory(str(ROOT), filename)
 
 
 @app.route("/api/feedback", methods=["POST"])
@@ -80,27 +93,24 @@ def feedback():
     if not data:
         return jsonify({"error": "Empty request body"}), 400
 
-    # Build a clear, structured prompt from the scoring data
-    score = data.get("score", 0)
-    grade = data.get("grade", "?")
-    in_envelope = data.get("in_envelope_pct", 0)
-    deviations = data.get("top_deviations", [])
+    score        = data.get("score", 0)
+    grade        = data.get("grade", "?")
+    in_envelope  = data.get("in_envelope_pct", 0)
+    deviations   = data.get("top_deviations", [])
+    club_type    = data.get("club_type", "driver")
+    club_label   = "driver" if club_type == "driver" else "iron"
 
-    user_message = f"""Swing analysis results:
-- Overall score: {score}/100 (Grade: {grade})
-- Frames within pro envelope: {in_envelope:.1f}%
+    user_message = f"""Club: {club_label}
+Swing score: {score}/100 (Grade: {grade})
+Frames within pro envelope: {in_envelope:.1f}%
 
-Top deviations from professional benchmarks:
+Top deviations from {club_label} professional benchmarks:
 """
     for i, dev in enumerate(deviations[:3], 1):
-        feature = dev.get("feature", "unknown")
-        direction = dev.get("direction", "?")
-        severity = dev.get("severity", 0)
-        mean_delta = dev.get("mean_delta", 0)
-        phase = dev.get("phase", "unknown")
         user_message += (
-            f"{i}. {feature}: {direction} by avg {mean_delta:.1f}° "
-            f"(severity {severity:.1f}) during {phase}\n"
+            f"{i}. {dev.get('feature','?')}: {dev.get('direction','?')} "
+            f"by avg {dev.get('mean_delta',0):.1f}° "
+            f"(severity {dev.get('severity',0):.1f}) during {dev.get('phase','?')}\n"
         )
 
     try:
@@ -112,19 +122,16 @@ Top deviations from professional benchmarks:
             messages=[{"role": "user", "content": user_message}],
         )
         raw = message.content[0].text.strip()
-
-        # Strip markdown code fences if Claude wrapped the JSON
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
             raw = raw.strip()
 
-        coaching_json = json.loads(raw)
-        return jsonify(coaching_json)
+        return jsonify(json.loads(raw))
 
     except json.JSONDecodeError as e:
-        return jsonify({"error": f"Claude returned invalid JSON: {e}", "raw": raw}), 502
+        return jsonify({"error": f"Claude returned invalid JSON: {e}"}), 502
     except anthropic.APIError as e:
         return jsonify({"error": f"Anthropic API error: {e}"}), 502
     except Exception as e:
@@ -133,12 +140,12 @@ Top deviations from professional benchmarks:
 
 if __name__ == "__main__":
     print("\n=== Golf Swing Analyzer Server ===")
-    print(f"  Serving on: http://localhost:8080")
+    print("  Serving on: http://localhost:8080")
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key or api_key == "your_key_here":
         print("  [warn] ANTHROPIC_API_KEY not set — coaching feedback will fail")
-    model_path = ROOT / "reference_model.json"
-    if not model_path.exists():
-        print("  [warn] reference_model.json not found — browser will use synthetic fallback")
+    for fname in ["reference_model.json", "reference_model_driver.json", "reference_model_iron.json"]:
+        status = "✓" if (ROOT / fname).exists() else "✗ (not built yet)"
+        print(f"  {fname}: {status}")
     print()
     app.run(host="0.0.0.0", port=8080, debug=False)

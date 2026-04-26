@@ -6,23 +6,22 @@
 <title>AI Golf Coach</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <style>
   :root {
-    --green-deep: #1a3a2a;
-    --green-mid: #2d5a3f;
+    --green-deep:  #1a3a2a;
+    --green-mid:   #2d5a3f;
     --green-light: #3d7a52;
-    --cream: #faf7f2;
-    --cream-dim: #e8e3da;
-    --gold: #c9a84c;
-    --gold-dim: #a8883a;
-    --red: #d64f3e;
-    --yellow: #e8b84b;
-    --text-primary: #faf7f2;
-    --text-muted: #9bb5a5;
+    --cream:       #faf7f2;
+    --cream-dim:   #e8e3da;
+    --gold:        #c9a84c;
+    --gold-dim:    #a8883a;
+    --red:         #d64f3e;
+    --yellow:      #e8b84b;
+    --text-primary:#faf7f2;
+    --text-muted:  #9bb5a5;
   }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
   body {
     font-family: 'DM Mono', monospace;
     background: var(--green-deep);
@@ -32,56 +31,44 @@
     flex-direction: column;
   }
 
+  /* ── Header ── */
   header {
-    padding: 1.25rem 2rem;
+    padding: 1rem 2rem;
     border-bottom: 1px solid var(--green-mid);
     display: flex;
     align-items: center;
     gap: 1rem;
   }
-
   header h1 {
     font-family: 'Instrument Serif', serif;
-    font-size: 1.5rem;
+    font-size: 1.4rem;
     color: var(--gold);
     letter-spacing: 0.02em;
   }
-
   .status-dot {
-    width: 10px;
-    height: 10px;
+    width: 10px; height: 10px;
     border-radius: 50%;
     background: #888;
     flex-shrink: 0;
     transition: background 0.3s;
   }
-  .status-dot.ready { background: #4caf50; }
-  .status-dot.recording { background: var(--red); animation: pulse-dot 0.8s infinite; }
-  .status-dot.processing { background: var(--gold); animation: pulse-dot 0.8s infinite; }
+  .status-dot.ready     { background: #4caf50; }
+  .status-dot.recording { background: var(--red);  animation: pulse-dot 0.8s infinite; }
+  .status-dot.processing{ background: var(--gold); animation: pulse-dot 0.8s infinite; }
+  @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .status-label { font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; }
 
-  @keyframes pulse-dot {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-  }
-
-  .status-label {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
+  /* ── Layout ── */
   .main-layout {
     display: grid;
-    grid-template-columns: 1fr 400px;
-    gap: 0;
+    grid-template-columns: 1fr 440px;
     flex: 1;
     overflow: hidden;
   }
 
-  /* ── Left panel: camera + controls ── */
+  /* ── Left panel ── */
   .left-panel {
-    padding: 1.5rem;
+    padding: 1.25rem 1.5rem;
     display: flex;
     flex-direction: column;
     gap: 1rem;
@@ -89,407 +76,292 @@
     overflow-y: auto;
   }
 
+  /* ── Club selector ── */
+  .club-selector {
+    display: flex;
+    gap: 0.75rem;
+  }
+  .club-card {
+    flex: 1;
+    background: #0d2419;
+    border: 2px solid var(--green-mid);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .club-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(201,168,76,0.06) 0%, transparent 60%);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .club-card:hover { border-color: var(--gold-dim); }
+  .club-card:hover::before { opacity: 1; }
+  .club-card.selected {
+    border-color: var(--gold);
+    background: #142b1e;
+  }
+  .club-card.selected::before { opacity: 1; }
+  .club-icon {
+    width: 40px; height: 40px;
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+  .club-card.selected .club-icon,
+  .club-card:hover .club-icon { opacity: 1; }
+  .club-card-text { flex: 1; }
+  .club-name {
+    font-family: 'Instrument Serif', serif;
+    font-size: 1rem;
+    color: var(--cream);
+    display: block;
+    line-height: 1.2;
+  }
+  .club-desc { font-size: 0.65rem; color: var(--text-muted); }
+  .club-badge {
+    font-size: 0.6rem;
+    color: var(--gold);
+    background: rgba(201,168,76,0.12);
+    border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 3px;
+    padding: 2px 6px;
+    display: none;
+  }
+  .club-card.selected .club-badge { display: inline-block; }
+
+  /* ── Camera ── */
   .camera-wrap {
     position: relative;
     width: 100%;
-    max-width: 640px;
     aspect-ratio: 16/9;
     background: #0a1a12;
     border-radius: 8px;
     overflow: hidden;
     border: 2px solid var(--green-mid);
   }
-
   #videoEl {
-    width: 100%;
-    height: 100%;
+    width: 100%; height: 100%;
     object-fit: cover;
-    transform: scaleX(-1); /* mirror */
+    transform: scaleX(-1);
     display: block;
   }
-
   #poseCanvas {
-    position: absolute;
-    top: 0; left: 0;
+    position: absolute; top:0; left:0;
     width: 100%; height: 100%;
     pointer-events: none;
-    transform: scaleX(-1); /* match the mirrored video */
+    transform: scaleX(-1);
   }
-
   .recording-overlay {
-    position: absolute;
-    top: 10px; left: 10px;
-    background: rgba(214, 79, 62, 0.9);
-    color: white;
-    font-size: 0.7rem;
-    font-weight: 500;
-    padding: 3px 8px;
-    border-radius: 4px;
-    display: none;
-    align-items: center;
-    gap: 6px;
+    position: absolute; top:10px; left:10px;
+    background: rgba(214,79,62,0.9);
+    color: white; font-size:0.7rem; font-weight:500;
+    padding: 3px 8px; border-radius: 4px;
+    display: none; align-items: center; gap: 6px;
   }
   .recording-overlay.show { display: flex; }
-  .rec-dot { width: 7px; height: 7px; border-radius: 50%; background: white; animation: pulse-dot 0.8s infinite; }
-
+  .rec-dot { width:7px;height:7px;border-radius:50%;background:white;animation:pulse-dot 0.8s infinite; }
   .countdown {
-    position: absolute;
-    bottom: 10px; right: 12px;
+    position: absolute; bottom:10px; right:12px;
     font-family: 'DM Mono', monospace;
-    font-size: 1.1rem;
-    color: var(--gold);
+    font-size: 1.1rem; color: var(--gold);
     text-shadow: 0 0 8px rgba(0,0,0,0.8);
     display: none;
   }
 
-  .controls {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
+  /* ── Controls ── */
+  .controls { display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; }
   button {
     font-family: 'DM Mono', monospace;
-    font-size: 0.8rem;
-    letter-spacing: 0.04em;
-    border: none;
-    border-radius: 6px;
+    font-size: 0.8rem; letter-spacing:0.04em;
+    border: none; border-radius:6px;
     padding: 0.6rem 1.2rem;
-    cursor: pointer;
-    transition: all 0.15s;
+    cursor: pointer; transition: all 0.15s;
     text-transform: uppercase;
   }
-
-  #recordBtn {
-    background: var(--gold);
-    color: var(--green-deep);
-    font-weight: 500;
-  }
-  #recordBtn:hover:not(:disabled) { background: var(--gold-dim); }
-  #recordBtn:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  #stopBtn {
-    background: var(--red);
-    color: white;
-    display: none;
-  }
-  #stopBtn.show { display: block; }
-  #stopBtn:hover { background: #b53e2f; }
-
+  #recordBtn { background:var(--gold); color:var(--green-deep); font-weight:500; }
+  #recordBtn:hover:not(:disabled) { background:var(--gold-dim); }
+  #recordBtn:disabled { opacity:0.4; cursor:not-allowed; }
+  #stopBtn { background:var(--red); color:white; display:none; }
+  #stopBtn.show { display:block; }
+  #stopBtn:hover { background:#b53e2f; }
   .upload-label {
-    background: var(--green-mid);
-    color: var(--cream);
-    padding: 0.6rem 1.2rem;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.8rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    background: var(--green-mid); color:var(--cream);
+    padding: 0.6rem 1.2rem; border-radius:6px;
+    cursor:pointer; font-size:0.8rem;
+    letter-spacing:0.04em; text-transform:uppercase;
     transition: background 0.15s;
   }
-  .upload-label:hover { background: var(--green-light); }
-  #fileInput { display: none; }
+  .upload-label:hover { background:var(--green-light); }
+  #fileInput { display:none; }
+  #analysisBtn { background:var(--green-light); color:var(--cream); display:none; margin-left:auto; }
+  #analysisBtn.show { display:block; }
+  #analysisBtn:hover { background:#4d9462; }
 
-  #analysisBtn {
-    background: var(--green-light);
-    color: var(--cream);
-    display: none;
-    margin-left: auto;
-  }
-  #analysisBtn.show { display: block; }
-  #analysisBtn:hover { background: #4d9462; }
-
+  /* ── Log ── */
   .log-box {
-    background: #0d2419;
-    border: 1px solid var(--green-mid);
-    border-radius: 6px;
-    padding: 0.75rem 1rem;
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    height: 80px;
-    overflow-y: auto;
-    line-height: 1.6;
+    background:#0d2419; border:1px solid var(--green-mid);
+    border-radius:6px; padding:0.75rem 1rem;
+    font-size:0.7rem; color:var(--text-muted);
+    height:80px; overflow-y:auto; line-height:1.6;
   }
-  .log-box p { margin: 0; }
-  .log-box .log-ok { color: #6fcf97; }
-  .log-box .log-warn { color: var(--yellow); }
-  .log-box .log-err { color: var(--red); }
+  .log-box p { margin:0; }
+  .log-ok   { color:#6fcf97; }
+  .log-warn { color:var(--yellow); }
+  .log-err  { color:var(--red); }
 
-  /* ── Right panel: results ── */
+  /* ── Right panel ── */
   .right-panel {
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-    background: #152e22;
+    display: flex; flex-direction:column;
+    overflow-y: auto; background: #152e22;
   }
-
   .results-placeholder {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    gap: 1rem;
-    color: var(--text-muted);
-    padding: 2rem;
-    text-align: center;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    flex:1; gap:1rem; color:var(--text-muted);
+    padding:2rem; text-align:center;
   }
+  .results-placeholder svg { opacity:0.3; }
+  .results-placeholder p { font-size:0.8rem; line-height:1.6; }
+  .results-content { padding:1.5rem; display:flex; flex-direction:column; gap:1.5rem; display:none; }
+  .results-content.show { display:flex; }
 
-  .results-placeholder svg { opacity: 0.3; }
-  .results-placeholder p { font-size: 0.8rem; line-height: 1.6; }
-
-  .results-content {
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    display: none;
-  }
-  .results-content.show { display: flex; }
-
-  /* Score ring */
-  .score-section {
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-  }
-
-  .score-ring-wrap {
-    position: relative;
-    width: 100px;
-    height: 100px;
-    flex-shrink: 0;
-  }
-
-  #scoreRingSvg {
-    transform: rotate(-90deg);
-  }
-
-  .score-ring-track {
-    fill: none;
-    stroke: var(--green-mid);
-    stroke-width: 8;
-  }
-
+  /* ── Score ring ── */
+  .score-section { display:flex; align-items:center; gap:1.25rem; }
+  .score-ring-wrap { position:relative; width:90px; height:90px; flex-shrink:0; }
+  #scoreRingSvg { transform:rotate(-90deg); }
+  .score-ring-track { fill:none; stroke:var(--green-mid); stroke-width:8; }
   #scoreRingArc {
-    fill: none;
-    stroke: var(--gold);
-    stroke-width: 8;
-    stroke-linecap: round;
-    stroke-dasharray: 283;
-    stroke-dashoffset: 283;
-    transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+    fill:none; stroke:var(--gold); stroke-width:8;
+    stroke-linecap:round; stroke-dasharray:226;
+    stroke-dashoffset:226;
+    transition: stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1),
+                stroke 0.6s ease;
+  }
+  .score-center { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; }
+  .score-number { font-family:'DM Mono',monospace; font-size:1.4rem; font-weight:500; color:var(--cream); line-height:1; }
+  .score-grade  { font-family:'Instrument Serif',serif; font-size:0.85rem; color:var(--gold); }
+  .score-meta { display:flex; flex-direction:column; gap:0.4rem; }
+  .summary-text { font-family:'Instrument Serif',serif; font-size:0.95rem; font-style:italic; color:var(--cream); line-height:1.45; }
+  .envelope-stat { font-size:0.65rem; color:var(--text-muted); }
+
+  /* ── Club badge in results ── */
+  .result-club-tag {
+    display: inline-flex; align-items:center; gap:5px;
+    font-size:0.65rem; color:var(--gold);
+    background:rgba(201,168,76,0.1);
+    border:1px solid rgba(201,168,76,0.25);
+    border-radius:4px; padding:3px 8px;
+    margin-bottom:0.25rem;
   }
 
-  .score-center {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center;
+  /* ── Section headers ── */
+  .section-header {
+    font-family:'Instrument Serif',serif;
+    font-size:0.85rem; color:var(--gold);
+    text-transform:uppercase; letter-spacing:0.08em;
+    margin-bottom:0.75rem;
   }
 
-  .score-number {
-    font-family: 'DM Mono', monospace;
-    font-size: 1.6rem;
-    font-weight: 500;
-    color: var(--cream);
-    line-height: 1;
-  }
+  /* ── Radar chart ── */
+  .radar-section { background:#1a3a2a; border:1px solid var(--green-mid); border-radius:10px; padding:1rem; }
+  .radar-wrap { position:relative; height:220px; }
 
-  .score-grade {
-    font-family: 'Instrument Serif', serif;
-    font-size: 0.9rem;
-    color: var(--gold);
+  /* ── Feature bars ── */
+  .feature-bars { display:flex; flex-direction:column; gap:0.5rem; }
+  .feat-row { display:flex; align-items:center; gap:0.6rem; }
+  .feat-label { font-size:0.65rem; color:var(--text-muted); width:90px; flex-shrink:0; text-align:right; }
+  .feat-bar-wrap {
+    flex:1; height:12px; background:#0d2419;
+    border-radius:6px; position:relative; overflow:visible;
   }
-
-  .score-meta {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
+  .feat-bar-pro {
+    position:absolute; height:100%; border-radius:6px;
+    background:rgba(201,168,76,0.2); border:1px solid rgba(201,168,76,0.35);
   }
-
-  .score-meta .summary-text {
-    font-family: 'Instrument Serif', serif;
-    font-size: 1rem;
-    font-style: italic;
-    color: var(--cream);
-    line-height: 1.4;
+  .feat-bar-user {
+    position:absolute; top:50%;
+    width:8px; height:18px;
+    transform:translate(-50%,-50%);
+    border-radius:3px;
+    transition: left 0.5s ease;
   }
+  .feat-bar-user.in   { background:#4caf50; }
+  .feat-bar-user.near { background:var(--yellow); }
+  .feat-bar-user.out  { background:var(--red); }
+  .feat-score { font-size:0.65rem; width:30px; flex-shrink:0; text-align:right; }
+  .feat-score.in   { color:#4caf50; }
+  .feat-score.near { color:var(--yellow); }
+  .feat-score.out  { color:var(--red); }
 
-  .score-meta .envelope-stat {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-  }
-
-  /* Coaching cards */
-  .coaching-section h3 {
-    font-family: 'Instrument Serif', serif;
-    font-size: 0.9rem;
-    color: var(--gold);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.75rem;
-  }
-
-  .coaching-cards {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-  }
-
+  /* ── Coaching cards ── */
+  .coaching-cards { display:flex; flex-direction:column; gap:0.6rem; }
   .coaching-card {
-    background: #1f4430;
-    border: 1px solid var(--green-mid);
-    border-radius: 8px;
-    padding: 0.85rem 1rem;
-    display: flex;
-    gap: 0.75rem;
-    align-items: flex-start;
-    opacity: 0;
-    transform: translateY(8px);
+    background:#1f4430; border:1px solid var(--green-mid);
+    border-radius:8px; padding:0.85rem 1rem;
+    display:flex; gap:0.75rem; align-items:flex-start;
+    opacity:0; transform:translateY(8px);
     transition: opacity 0.4s ease, transform 0.4s ease;
   }
-  .coaching-card.visible { opacity: 1; transform: translateY(0); }
-
+  .coaching-card.visible { opacity:1; transform:translateY(0); }
   .priority-badge {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--gold);
-    color: var(--green-deep);
-    font-size: 0.7rem;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
+    width:22px; height:22px; border-radius:50%;
+    background:var(--gold); color:var(--green-deep);
+    font-size:0.7rem; font-weight:500;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
   }
+  .coaching-card-body { flex:1; }
+  .coaching-headline { font-size:0.8rem; font-weight:500; color:var(--cream); margin-bottom:0.3rem; }
+  .coaching-cue { font-size:0.72rem; color:var(--text-muted); line-height:1.5; }
 
-  .coaching-card-body { flex: 1; }
+  /* ── Phase timeline ── */
+  .timeline-labels { display:flex; justify-content:space-between; font-size:0.6rem; color:var(--text-muted); margin-bottom:0.3rem; }
+  #phaseBar { display:flex; height:16px; border-radius:4px; overflow:hidden; gap:1px; }
+  .phase-seg { flex:1; min-width:1px; }
+  .phase-seg.good { background:#4caf50; }
+  .phase-seg.ok   { background:var(--yellow); }
+  .phase-seg.bad  { background:var(--red); }
 
-  .coaching-headline {
-    font-size: 0.8rem;
-    font-weight: 500;
-    color: var(--cream);
-    margin-bottom: 0.3rem;
-  }
-
-  .coaching-cue {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    line-height: 1.5;
-  }
-
-  /* Phase timeline */
-  .timeline-section h3 {
-    font-family: 'Instrument Serif', serif;
-    font-size: 0.9rem;
-    color: var(--gold);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.5rem;
-  }
-
-  .timeline-labels {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.6rem;
-    color: var(--text-muted);
-    margin-bottom: 0.3rem;
-  }
-
-  #phaseBar {
-    display: flex;
-    height: 16px;
-    border-radius: 4px;
-    overflow: hidden;
-    gap: 1px;
-  }
-
-  .phase-seg {
-    flex: 1;
-    min-width: 1px;
-  }
-  .phase-seg.good { background: #4caf50; }
-  .phase-seg.ok   { background: var(--yellow); }
-  .phase-seg.bad  { background: var(--red); }
-
-  .impact-marker {
-    width: 2px;
-    height: 16px;
-    background: var(--cream);
-    flex-shrink: 0;
-  }
-
-  /* Deviation details */
-  .deviations-section h3 {
-    font-family: 'Instrument Serif', serif;
-    font-size: 0.9rem;
-    color: var(--gold);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.75rem;
-  }
-
-  .deviation-item {
-    border: 1px solid var(--green-mid);
-    border-radius: 6px;
-    overflow: hidden;
-    margin-bottom: 0.4rem;
-  }
-
+  /* ── Deviation list ── */
+  .deviation-item { border:1px solid var(--green-mid); border-radius:6px; overflow:hidden; margin-bottom:0.4rem; }
   .deviation-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    cursor: pointer;
-    background: #1f4430;
-    font-size: 0.75rem;
+    display:flex; align-items:center; gap:0.5rem;
+    padding:0.5rem 0.75rem; cursor:pointer;
+    background:#1f4430; font-size:0.75rem;
   }
-  .deviation-header:hover { background: #2a5a3f; }
+  .deviation-header:hover { background:#2a5a3f; }
+  .dev-name { flex:1; color:var(--cream); }
+  .dev-dir { font-size:0.65rem; padding:2px 6px; border-radius:3px; text-transform:uppercase; }
+  .dev-dir.high { background:rgba(214,79,62,0.25); color:#f08070; }
+  .dev-dir.low  { background:rgba(232,184,75,0.25); color:var(--yellow); }
+  .dev-severity { font-size:0.65rem; color:var(--text-muted); }
+  .dev-chevron  { color:var(--text-muted); font-size:0.7rem; transition:transform 0.2s; }
+  .deviation-item.open .dev-chevron { transform:rotate(180deg); }
+  .deviation-body { display:none; padding:0.6rem 0.75rem; font-size:0.7rem; color:var(--text-muted); background:#162e20; line-height:1.6; }
+  .deviation-item.open .deviation-body { display:block; }
 
-  .dev-name { flex: 1; color: var(--cream); }
-  .dev-dir { font-size: 0.65rem; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; }
-  .dev-dir.high { background: rgba(214,79,62,0.25); color: #f08070; }
-  .dev-dir.low  { background: rgba(232,184,75,0.25); color: var(--yellow); }
-  .dev-severity { font-size: 0.65rem; color: var(--text-muted); }
-  .dev-chevron { color: var(--text-muted); font-size: 0.7rem; transition: transform 0.2s; }
-  .deviation-item.open .dev-chevron { transform: rotate(180deg); }
-
-  .deviation-body {
-    display: none;
-    padding: 0.6rem 0.75rem;
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    background: #162e20;
-    line-height: 1.6;
-  }
-  .deviation-item.open .deviation-body { display: block; }
-
-  /* Mobile */
-  @media (max-width: 900px) {
-    .main-layout {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto auto;
-    }
-    .left-panel { border-right: none; border-bottom: 1px solid var(--green-mid); }
-    .right-panel { min-height: 400px; }
-  }
-
-  /* Loading state */
+  /* ── Misc ── */
   .spinner {
-    display: inline-block;
-    width: 14px; height: 14px;
-    border: 2px solid var(--green-mid);
-    border-top-color: var(--gold);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-    vertical-align: middle;
-    margin-right: 6px;
+    display:inline-block; width:14px; height:14px;
+    border:2px solid var(--green-mid); border-top-color:var(--gold);
+    border-radius:50%; animation:spin 0.7s linear infinite;
+    vertical-align:middle; margin-right:6px;
   }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  @media (max-width:900px) {
+    .main-layout { grid-template-columns:1fr; }
+    .left-panel { border-right:none; border-bottom:1px solid var(--green-mid); }
+    .right-panel { min-height:400px; }
+  }
 </style>
 </head>
 <body>
@@ -497,13 +369,50 @@
 <header>
   <div class="status-dot" id="statusDot"></div>
   <h1>AI Golf Coach</h1>
-  <span class="status-label" id="statusLabel">Loading MediaPipe...</span>
+  <span class="status-label" id="statusLabel">Loading...</span>
 </header>
 
 <div class="main-layout">
 
-  <!-- Left panel -->
+  <!-- ── Left panel ── -->
   <div class="left-panel">
+
+    <!-- Club selector -->
+    <div class="club-selector">
+
+      <div class="club-card selected" id="clubDriver" onclick="selectClub('driver')">
+        <!-- Driver SVG icon -->
+        <svg class="club-icon" viewBox="0 0 40 40" fill="none">
+          <ellipse cx="20" cy="33" rx="9" ry="5" fill="#c9a84c" opacity="0.9"/>
+          <rect x="18.5" y="8" width="3" height="22" rx="1.5" fill="#c9a84c" opacity="0.7"/>
+          <ellipse cx="20" cy="8" rx="6" ry="4" fill="#c9a84c"/>
+          <line x1="20" y1="4" x2="16" y2="2" stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <div class="club-card-text">
+          <span class="club-name">Driver</span>
+          <span class="club-desc">Full power, max distance</span>
+        </div>
+        <span class="club-badge">ACTIVE</span>
+      </div>
+
+      <div class="club-card" id="clubIron" onclick="selectClub('iron')">
+        <!-- Iron SVG icon -->
+        <svg class="club-icon" viewBox="0 0 40 40" fill="none">
+          <rect x="18.5" y="6" width="3" height="22" rx="1.5" fill="#c9a84c" opacity="0.7"/>
+          <path d="M12 28 L28 28 L30 36 L10 36 Z" fill="#c9a84c" opacity="0.9"/>
+          <path d="M12 28 L28 28" stroke="#c9a84c" stroke-width="1"/>
+          <line x1="20" y1="3" x2="17" y2="1" stroke="#c9a84c" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <div class="club-card-text">
+          <span class="club-name">Iron</span>
+          <span class="club-desc">Precision, ball striking</span>
+        </div>
+        <span class="club-badge">ACTIVE</span>
+      </div>
+
+    </div>
+
+    <!-- Camera -->
     <div class="camera-wrap" id="cameraWrap">
       <video id="videoEl" autoplay playsinline muted></video>
       <canvas id="poseCanvas"></canvas>
@@ -513,6 +422,7 @@
       <div class="countdown" id="countdown"></div>
     </div>
 
+    <!-- Controls -->
     <div class="controls">
       <button id="recordBtn" disabled>&#9679; Record Swing</button>
       <button id="stopBtn">&#9632; Stop</button>
@@ -524,59 +434,77 @@
     <div class="log-box" id="logBox"></div>
   </div>
 
-  <!-- Right panel -->
+  <!-- ── Right panel ── -->
   <div class="right-panel">
+
     <div class="results-placeholder" id="resultsPlaceholder">
       <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
         <circle cx="32" cy="32" r="28" stroke="#3d7a52" stroke-width="2"/>
         <path d="M20 32 Q26 20 32 32 Q38 44 44 32" stroke="#c9a84c" stroke-width="2" fill="none"/>
         <circle cx="32" cy="32" r="3" fill="#c9a84c"/>
       </svg>
-      <p>Record or upload your golf swing.<br>MediaPipe will extract your joint angles<br>and compare them to professional benchmarks.</p>
+      <p>Select your club, then record or upload your swing.<br>
+      MediaPipe extracts joint angles frame-by-frame<br>
+      and scores you against professional benchmarks.</p>
     </div>
 
     <div class="results-content" id="resultsContent">
 
-      <!-- Score ring + summary -->
+      <!-- Score + summary -->
       <div class="score-section">
         <div class="score-ring-wrap">
-          <svg id="scoreRingSvg" width="100" height="100" viewBox="0 0 100 100">
-            <circle class="score-ring-track" cx="50" cy="50" r="45"/>
-            <circle id="scoreRingArc" cx="50" cy="50" r="45"/>
+          <svg id="scoreRingSvg" width="90" height="90" viewBox="0 0 90 90">
+            <circle class="score-ring-track" cx="45" cy="45" r="36"/>
+            <circle id="scoreRingArc"         cx="45" cy="45" r="36"/>
           </svg>
           <div class="score-center">
             <div class="score-number" id="scoreNumber">--</div>
-            <div class="score-grade" id="scoreGrade">-</div>
+            <div class="score-grade"  id="scoreGrade">-</div>
           </div>
         </div>
         <div class="score-meta">
-          <div class="summary-text" id="summaryText"></div>
+          <div id="resultClubTag" class="result-club-tag"></div>
+          <div class="summary-text"  id="summaryText"></div>
           <div class="envelope-stat" id="envelopeStat"></div>
         </div>
       </div>
 
+      <!-- Radar chart -->
+      <div class="radar-section">
+        <div class="section-header">Swing Fingerprint vs Pro</div>
+        <div class="radar-wrap">
+          <canvas id="radarChart"></canvas>
+        </div>
+      </div>
+
       <!-- Coaching cards -->
-      <div class="coaching-section">
-        <h3>Coaching Points</h3>
+      <div>
+        <div class="section-header">Coaching Points</div>
         <div class="coaching-cards" id="coachingCards">
-          <div style="font-size:0.75rem;color:var(--text-muted);">
+          <div style="font-size:0.75rem;color:var(--text-muted)">
             <span class="spinner"></span>Getting coaching feedback...
           </div>
         </div>
       </div>
 
-      <!-- Phase timeline bar -->
-      <div class="timeline-section">
-        <h3>Swing Timeline</h3>
+      <!-- Feature comparison bars -->
+      <div>
+        <div class="section-header">Pro Comparison — Impact Frame</div>
+        <div class="feature-bars" id="featureBars"></div>
+      </div>
+
+      <!-- Phase timeline -->
+      <div>
+        <div class="section-header">Swing Timeline</div>
         <div class="timeline-labels">
-          <span>Address</span><span>Takeaway</span><span>Top</span><span>Impact</span><span>Follow-through</span>
+          <span>Address</span><span>Takeaway</span><span>Top</span><span>Impact</span><span>Finish</span>
         </div>
         <div id="phaseBar"></div>
       </div>
 
-      <!-- All deviations detail -->
-      <div class="deviations-section">
-        <h3>All Deviations</h3>
+      <!-- All deviations -->
+      <div>
+        <div class="section-header">All Deviations</div>
         <div id="deviationList"></div>
       </div>
 
@@ -585,33 +513,29 @@
 
 </div>
 
-<!-- MediaPipe Tasks Vision CDN -->
 <script type="module">
 import {
-  PoseLandmarker,
-  FilesetResolver,
-  DrawingUtils,
+  PoseLandmarker, FilesetResolver, DrawingUtils,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm";
 
 // ─────────────────────────────────────────
 //  State
 // ─────────────────────────────────────────
-let poseLandmarker = null;
-let referenceModel = null;   // loaded from reference_model.json or synthetic fallback
-let stream = null;
-let mediaRecorder = null;
-let recordedChunks = [];
-let isRecording = false;
-let recordingTimer = null;
-let liveFrames = [];          // raw angle dicts collected during recording
-let lastVideoTime = -1;
-let animFrameId = null;
-let uploadedVideoEl = null;   // used when processing an uploaded file
+let poseLandmarker  = null;
+let models          = { combined: null, driver: null, iron: null };
+let selectedClub    = "driver";   // "driver" | "iron"
+let stream          = null;
+let isRecording     = false;
+let recordingTimer  = null;
+let liveFrames      = [];
+let lastVideoTime   = -1;
+let animFrameId     = null;
+let radarChartInst  = null;
 
 const MAX_RECORDING_SECONDS = 10;
 
 // ─────────────────────────────────────────
-//  DOM refs
+//  DOM
 // ─────────────────────────────────────────
 const videoEl       = document.getElementById("videoEl");
 const poseCanvas    = document.getElementById("poseCanvas");
@@ -629,377 +553,419 @@ const resultsPlaceholder = document.getElementById("resultsPlaceholder");
 const resultsContent     = document.getElementById("resultsContent");
 
 // ─────────────────────────────────────────
-//  Logging helpers
+//  Logging
 // ─────────────────────────────────────────
 function log(msg, type = "info") {
   console.log(`[golf-coach] ${msg}`);
   const p = document.createElement("p");
   p.textContent = msg;
-  if (type === "ok") p.className = "log-ok";
-  else if (type === "warn") p.className = "log-warn";
-  else if (type === "err") p.className = "log-err";
+  if (type === "ok")   p.className = "log-ok";
+  if (type === "warn") p.className = "log-warn";
+  if (type === "err")  p.className = "log-err";
   logBox.appendChild(p);
   logBox.scrollTop = logBox.scrollHeight;
 }
-
 function setStatus(state, label) {
   statusDot.className = `status-dot ${state}`;
   statusLabel.textContent = label;
 }
 
 // ─────────────────────────────────────────
-//  Angle math  (direct port of Python version)
-//  All angles use MediaPipe WORLD landmarks (x,y,z).
+//  Club selection
 // ─────────────────────────────────────────
-function angle3pts(a, b, c) {
-  // Angle at vertex B in degrees
-  const ba = [a.x - b.x, a.y - b.y, a.z - b.z];
-  const bc = [c.x - b.x, c.y - b.y, c.z - b.z];
-  const dot = ba[0]*bc[0] + ba[1]*bc[1] + ba[2]*bc[2];
-  const magBa = Math.sqrt(ba[0]**2 + ba[1]**2 + ba[2]**2);
-  const magBc = Math.sqrt(bc[0]**2 + bc[1]**2 + bc[2]**2);
-  if (magBa < 1e-6 || magBc < 1e-6) return NaN;
-  return Math.acos(Math.max(-1, Math.min(1, dot / (magBa * magBc)))) * (180 / Math.PI);
-}
-
-// MediaPipe landmark indices (matches Python mp.solutions.pose.PoseLandmark)
-const LM = {
-  NOSE: 0,
-  LEFT_SHOULDER: 11, RIGHT_SHOULDER: 12,
-  LEFT_ELBOW: 13,    RIGHT_ELBOW: 14,
-  LEFT_WRIST: 15,    RIGHT_WRIST: 16,
-  LEFT_HIP: 23,      RIGHT_HIP: 24,
-  LEFT_KNEE: 25,     RIGHT_KNEE: 26,
-  LEFT_ANKLE: 27,    RIGHT_ANKLE: 28,
+window.selectClub = function(club) {
+  selectedClub = club;
+  document.getElementById("clubDriver").classList.toggle("selected", club === "driver");
+  document.getElementById("clubIron").classList.toggle("selected", club === "iron");
+  log(`Club set to: ${club}`);
 };
 
-function isLeftHanded(landmarks) {
-  // Same heuristic as Python: if left shoulder is to the right of right shoulder → left-handed
-  return landmarks[LM.LEFT_SHOULDER].x < landmarks[LM.RIGHT_SHOULDER].x;
-}
-
-function extractAngles(worldLandmarks, normalLandmarks) {
-  if (!worldLandmarks || worldLandmarks.length < 29) return null;
-
-  const leftHanded = isLeftHanded(normalLandmarks);
-  const w = worldLandmarks;
-
-  // Map lead/trail to left/right depending on handedness
-  const [ls, rs] = leftHanded ? [LM.RIGHT_SHOULDER, LM.LEFT_SHOULDER] : [LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER];
-  const [le, re] = leftHanded ? [LM.RIGHT_ELBOW,    LM.LEFT_ELBOW]    : [LM.LEFT_ELBOW,    LM.RIGHT_ELBOW];
-  const [lw, rw] = leftHanded ? [LM.RIGHT_WRIST,    LM.LEFT_WRIST]    : [LM.LEFT_WRIST,    LM.RIGHT_WRIST];
-  const [lh, rh] = leftHanded ? [LM.RIGHT_HIP,      LM.LEFT_HIP]      : [LM.LEFT_HIP,      LM.RIGHT_HIP];
-  const [lk, rk] = leftHanded ? [LM.RIGHT_KNEE,     LM.LEFT_KNEE]     : [LM.LEFT_KNEE,     LM.RIGHT_KNEE];
-  const [la, ra] = leftHanded ? [LM.RIGHT_ANKLE,    LM.LEFT_ANKLE]    : [LM.LEFT_ANKLE,    LM.RIGHT_ANKLE];
-
-  const lead_elbow      = angle3pts(w[ls], w[le], w[lw]);
-  const trail_elbow     = angle3pts(w[rs], w[re], w[rw]);
-  const lead_wrist_angle  = angle3pts(w[le], w[lw], w[ls]);
-  const trail_wrist_angle = angle3pts(w[re], w[rw], w[rs]);
-  const lead_knee_flex  = angle3pts(w[lh], w[lk], w[la]);
-  const trail_knee_flex = angle3pts(w[rh], w[rk], w[ra]);
-
-  // Spine tilt: angle of mid-shoulder→mid-hip vector from vertical (0° = upright)
-  const midShoulder = { x: (w[ls].x+w[rs].x)/2, y: (w[ls].y+w[rs].y)/2, z: (w[ls].z+w[rs].z)/2 };
-  const midHip      = { x: (w[lh].x+w[rh].x)/2, y: (w[lh].y+w[rh].y)/2, z: (w[lh].z+w[rh].z)/2 };
-  const spineVec = [midHip.x-midShoulder.x, midHip.y-midShoulder.y, midHip.z-midShoulder.z];
-  const spineLen = Math.sqrt(spineVec[0]**2 + spineVec[1]**2 + spineVec[2]**2);
-  const spine_tilt = spineLen < 1e-6 ? NaN :
-    Math.acos(Math.max(-1, Math.min(1, spineVec[1] / spineLen))) * (180 / Math.PI);
-
-  // Hip and shoulder rotation: arctan of z-depth delta between paired landmarks
-  const hip_rotation      = Math.atan2(w[lh].z - w[rh].z, Math.abs(w[lh].x - w[rh].x) + 1e-6) * (180 / Math.PI);
-  const shoulder_rotation = Math.atan2(w[ls].z - w[rs].z, Math.abs(w[ls].x - w[rs].x) + 1e-6) * (180 / Math.PI);
-
-  // X-factor: shoulder rotation relative to hip rotation — key power metric
-  const x_factor = shoulder_rotation - hip_rotation;
-
-  // Hand height: avg wrist Y normalized within shoulder-hip Y range (positive = above shoulders)
-  const avgWristY   = (w[lw].y + w[rw].y) / 2;
-  const shoulderY   = (w[ls].y + w[rs].y) / 2;
-  const hipY        = (w[lh].y + w[rh].y) / 2;
-  const yRange      = Math.abs(hipY - shoulderY);
-  const hand_height = yRange < 1e-6 ? NaN : (shoulderY - avgWristY) / yRange;
-
-  return {
-    lead_elbow, trail_elbow,
-    lead_wrist_angle, trail_wrist_angle,
-    lead_knee_flex, trail_knee_flex,
-    spine_tilt,
-    hip_rotation, shoulder_rotation,
-    x_factor,
-    hand_height,
-  };
+function activeModel() {
+  return models[selectedClub] || models.combined;
 }
 
 // ─────────────────────────────────────────
-//  Swing normalization (100 frames, impact @ 75)
+//  Angle math — direct port of Python
+// ─────────────────────────────────────────
+function angle3pts(a, b, c) {
+  const ba = [a.x-b.x, a.y-b.y, a.z-b.z];
+  const bc = [c.x-b.x, c.y-b.y, c.z-b.z];
+  const dot = ba[0]*bc[0] + ba[1]*bc[1] + ba[2]*bc[2];
+  const mba = Math.sqrt(ba[0]**2 + ba[1]**2 + ba[2]**2);
+  const mbc = Math.sqrt(bc[0]**2 + bc[1]**2 + bc[2]**2);
+  if (mba < 1e-6 || mbc < 1e-6) return NaN;
+  return Math.acos(Math.max(-1, Math.min(1, dot / (mba * mbc)))) * (180 / Math.PI);
+}
+
+const LM = {
+  LEFT_SHOULDER:11, RIGHT_SHOULDER:12,
+  LEFT_ELBOW:13,    RIGHT_ELBOW:14,
+  LEFT_WRIST:15,    RIGHT_WRIST:16,
+  LEFT_HIP:23,      RIGHT_HIP:24,
+  LEFT_KNEE:25,     RIGHT_KNEE:26,
+  LEFT_ANKLE:27,    RIGHT_ANKLE:28,
+};
+
+function isLeftHanded(lms) {
+  return lms[LM.LEFT_SHOULDER].x < lms[LM.RIGHT_SHOULDER].x;
+}
+
+function extractAngles(worldLms, normLms) {
+  if (!worldLms || worldLms.length < 29) return null;
+  const leftHanded = isLeftHanded(normLms);
+  const w = worldLms;
+
+  const [ls,rs] = leftHanded ? [LM.RIGHT_SHOULDER,LM.LEFT_SHOULDER]  : [LM.LEFT_SHOULDER,LM.RIGHT_SHOULDER];
+  const [le,re] = leftHanded ? [LM.RIGHT_ELBOW,   LM.LEFT_ELBOW]     : [LM.LEFT_ELBOW,   LM.RIGHT_ELBOW];
+  const [lw,rw] = leftHanded ? [LM.RIGHT_WRIST,   LM.LEFT_WRIST]     : [LM.LEFT_WRIST,   LM.RIGHT_WRIST];
+  const [lh,rh] = leftHanded ? [LM.RIGHT_HIP,     LM.LEFT_HIP]       : [LM.LEFT_HIP,     LM.RIGHT_HIP];
+  const [lk,rk] = leftHanded ? [LM.RIGHT_KNEE,    LM.LEFT_KNEE]      : [LM.LEFT_KNEE,    LM.RIGHT_KNEE];
+  const [la,ra] = leftHanded ? [LM.RIGHT_ANKLE,   LM.LEFT_ANKLE]     : [LM.LEFT_ANKLE,   LM.RIGHT_ANKLE];
+
+  const lead_elbow       = angle3pts(w[ls],w[le],w[lw]);
+  const trail_elbow      = angle3pts(w[rs],w[re],w[rw]);
+  const lead_wrist_angle = angle3pts(w[le],w[lw],w[ls]);
+  const trail_wrist_angle= angle3pts(w[re],w[rw],w[rs]);
+  const lead_knee_flex   = angle3pts(w[lh],w[lk],w[la]);
+  const trail_knee_flex  = angle3pts(w[rh],w[rk],w[ra]);
+
+  const midShoulder = {x:(w[ls].x+w[rs].x)/2, y:(w[ls].y+w[rs].y)/2, z:(w[ls].z+w[rs].z)/2};
+  const midHip      = {x:(w[lh].x+w[rh].x)/2, y:(w[lh].y+w[rh].y)/2, z:(w[lh].z+w[rh].z)/2};
+  const sv = [midHip.x-midShoulder.x, midHip.y-midShoulder.y, midHip.z-midShoulder.z];
+  const svLen = Math.sqrt(sv[0]**2+sv[1]**2+sv[2]**2);
+  const spine_tilt = svLen < 1e-6 ? NaN : Math.acos(Math.max(-1,Math.min(1,sv[1]/svLen))) * (180/Math.PI);
+
+  const hip_rotation      = Math.atan2(w[lh].z-w[rh].z, Math.abs(w[lh].x-w[rh].x)+1e-6) * (180/Math.PI);
+  const shoulder_rotation = Math.atan2(w[ls].z-w[rs].z, Math.abs(w[ls].x-w[rs].x)+1e-6) * (180/Math.PI);
+  const x_factor = shoulder_rotation - hip_rotation;
+
+  const avgWristY = (w[lw].y+w[rw].y)/2;
+  const shoulderY = (w[ls].y+w[rs].y)/2;
+  const hipY      = (w[lh].y+w[rh].y)/2;
+  const yRange    = Math.abs(hipY-shoulderY);
+  const hand_height = yRange < 1e-6 ? NaN : (shoulderY-avgWristY)/yRange;
+
+  return { lead_elbow, trail_elbow, lead_wrist_angle, trail_wrist_angle,
+           lead_knee_flex, trail_knee_flex, spine_tilt,
+           hip_rotation, shoulder_rotation, x_factor, hand_height };
+}
+
+// ─────────────────────────────────────────
+//  Normalisation
 // ─────────────────────────────────────────
 const FEATURES = [
   "lead_elbow","trail_elbow","lead_wrist_angle","trail_wrist_angle",
   "lead_knee_flex","trail_knee_flex","spine_tilt",
   "hip_rotation","shoulder_rotation","x_factor","hand_height",
 ];
-const N_FRAMES = 100;
-const IMPACT_FRAME = 75;
+const N_FRAMES    = 100;
+const IMPACT_FRAME= 75;
 
 function detectImpactFrame(frames) {
-  // Peak of |Δlead_elbow| in the second half of the swing = impact
   const n = frames.length;
-  if (n < 4) return Math.floor(n / 2);
-
+  if (n < 4) return Math.floor(n/2);
   const vals = frames.map(f => f.lead_elbow ?? NaN);
-  const velocities = [];
-  for (let i = 1; i < n - 1; i++) {
-    if (!isNaN(vals[i-1]) && !isNaN(vals[i+1])) {
-      velocities.push({ idx: i, vel: Math.abs(vals[i+1] - vals[i-1]) });
-    }
+  const vels = [];
+  for (let i=1;i<n-1;i++) {
+    if (!isNaN(vals[i-1]) && !isNaN(vals[i+1]))
+      vels.push({idx:i, vel:Math.abs(vals[i+1]-vals[i-1])});
   }
-  const downswing = velocities.filter(v => v.idx >= Math.floor(n * 0.4));
-  if (!downswing.length) return Math.floor(n * 0.75);
-
-  return downswing.reduce((best, cur) => cur.vel > best.vel ? cur : best).idx;
+  const ds = vels.filter(v => v.idx >= Math.floor(n*0.4));
+  return ds.length ? ds.reduce((b,c)=>c.vel>b.vel?c:b).idx : Math.floor(n*0.75);
 }
 
-function lerp1D(srcArr, targetLen) {
-  // Linearly interpolate srcArr to targetLen points
+function lerp1D(src, targetLen) {
   const out = new Float32Array(targetLen);
-  const n = srcArr.length;
-  // Get valid (non-NaN) indices
-  const validX = [], validY = [];
-  for (let i = 0; i < n; i++) {
-    if (!isNaN(srcArr[i])) { validX.push(i); validY.push(srcArr[i]); }
-  }
-  if (validX.length < 2) return out.fill(NaN);
-
-  for (let t = 0; t < targetLen; t++) {
-    const srcPos = (t / (targetLen - 1)) * (n - 1);
-    // Binary search for surrounding valid points
-    let lo = 0, hi = validX.length - 1;
-    while (lo < hi - 1) {
-      const mid = (lo + hi) >> 1;
-      if (validX[mid] <= srcPos) lo = mid; else hi = mid;
-    }
-    if (lo === hi) { out[t] = validY[lo]; continue; }
-    const t2 = (srcPos - validX[lo]) / (validX[hi] - validX[lo]);
-    out[t] = validY[lo] + t2 * (validY[hi] - validY[lo]);
+  const n = src.length;
+  const vx=[],vy=[];
+  for (let i=0;i<n;i++) if (!isNaN(src[i])){vx.push(i);vy.push(src[i]);}
+  if (vx.length < 2) return out.fill(NaN);
+  for (let t=0;t<targetLen;t++) {
+    const pos = (t/(targetLen-1))*(n-1);
+    let lo=0,hi=vx.length-1;
+    while (lo<hi-1){const m=(lo+hi)>>1; if(vx[m]<=pos) lo=m; else hi=m;}
+    if (lo===hi){out[t]=vy[lo];continue;}
+    const frac=(pos-vx[lo])/(vx[hi]-vx[lo]);
+    out[t]=vy[lo]+frac*(vy[hi]-vy[lo]);
   }
   return out;
 }
 
 function normalizeSwing(frames) {
-  // Normalize to N_FRAMES with impact at IMPACT_FRAME using independent
-  // interpolation of pre-impact and post-impact segments.
-  const n = frames.length;
   const impactIdx = detectImpactFrame(frames);
-  console.log(`[golf-coach] Impact detected at frame ${impactIdx}/${n}`);
-
+  console.log(`[golf-coach] Impact at frame ${impactIdx}/${frames.length}`);
   const normalized = {};
-
   for (const feat of FEATURES) {
     const raw = frames.map(f => f[feat] ?? NaN);
-
-    // Pre-impact: frames 0..impactIdx → normalized frames 0..IMPACT_FRAME
-    const preRaw   = raw.slice(0, impactIdx + 1);
-    const preNorm  = lerp1D(preRaw, IMPACT_FRAME + 1);
-
-    // Post-impact: frames impactIdx..n-1 → normalized frames IMPACT_FRAME..N_FRAMES-1
-    const postRaw  = raw.slice(impactIdx);
-    const postNorm = lerp1D(postRaw, N_FRAMES - IMPACT_FRAME);
-
+    const pre  = lerp1D(raw.slice(0, impactIdx+1), IMPACT_FRAME+1);
+    const post = lerp1D(raw.slice(impactIdx),       N_FRAMES-IMPACT_FRAME);
     const full = new Float32Array(N_FRAMES);
-    full.set(preNorm, 0);
-    full.set(postNorm, IMPACT_FRAME);
+    full.set(pre, 0);
+    full.set(post, IMPACT_FRAME);
     normalized[feat] = full;
   }
-
   return normalized;
 }
 
 // ─────────────────────────────────────────
-//  Scoring against reference envelope
+//  Scoring
 // ─────────────────────────────────────────
-function scoreSwing(normalizedSwing, model) {
+function scoreSwing(normSwing, model) {
   const { envelope, weights } = model;
-  let totalWeight = 0, weightedScore = 0;
-  const deviations = [];
-  let framesInEnvelope = 0;
-  const phaseQualities = new Float32Array(N_FRAMES).fill(0);
-  const phaseWeightSum = new Float32Array(N_FRAMES).fill(0);
+  let totalW=0, weightedScore=0;
+  const deviations=[], phaseQ=new Float32Array(N_FRAMES), phaseW=new Float32Array(N_FRAMES);
+  let framesIn=0;
+
+  const phaseNames=["address","takeaway","backswing","top of backswing","transition",
+                    "downswing","impact zone","early follow-through","finish"];
 
   for (const feat of FEATURES) {
-    const env  = envelope[feat];
-    const vals = normalizedSwing[feat];
-    const w    = weights[feat] ?? 1.0;
+    const env=envelope[feat], vals=normSwing[feat], w=weights[feat]??1;
+    if (!env||!vals) continue;
 
-    if (!env || !vals) continue;
-
-    let featAbove = 0, featBelow = 0, featTotal = 0;
-    let sumDelta = 0, nDelta = 0;
-    let worstDelta = 0, worstPhase = "";
-
-    const phaseNames = ["address", "takeaway", "backswing", "top of backswing", "transition",
-                        "downswing", "impact zone", "early follow-through", "finish"];
-
-    for (let f = 0; f < N_FRAMES; f++) {
-      const v = vals[f];
-      if (isNaN(v)) continue;
-      const p25 = env.p25[f], p75 = env.p75[f];
-
-      featTotal++;
-      const inEnv = v >= p25 && v <= p75;
-      if (inEnv) framesInEnvelope++;
-
-      let delta = 0;
-      let direction = "in";
-      if (v < p25) { delta = p25 - v; direction = "low"; featBelow++; }
-      else if (v > p75) { delta = v - p75; direction = "high"; featAbove++; }
-
-      const iqr = Math.max(p75 - p25, 1);
-      const normalizedDelta = delta / iqr;
-      sumDelta += normalizedDelta;
-      nDelta++;
-
-      // Track worst deviation for phase labeling
-      if (delta > worstDelta) {
-        worstDelta = delta;
-        const phaseIdx = Math.min(Math.floor(f / (N_FRAMES / phaseNames.length)), phaseNames.length - 1);
-        worstPhase = phaseNames[phaseIdx];
+    let above=0,below=0,total=0,sumDelta=0,worstD=0,worstPhase="";
+    for (let f=0;f<N_FRAMES;f++) {
+      const v=vals[f]; if(isNaN(v)) continue;
+      const p25=env.p25[f], p75=env.p75[f]; total++;
+      const inEnv=v>=p25&&v<=p75;
+      if(inEnv) framesIn++;
+      let delta=0;
+      if(v<p25){delta=p25-v;below++;}
+      else if(v>p75){delta=v-p75;above++;}
+      const iqr=Math.max(p75-p25,1);
+      const nd=delta/iqr; sumDelta+=nd;
+      if(delta>worstD){
+        worstD=delta;
+        worstPhase=phaseNames[Math.min(Math.floor(f/(N_FRAMES/phaseNames.length)),phaseNames.length-1)];
       }
-
-      // Per-frame quality: 1=good, 0.5=ok, 0=bad
-      const quality = inEnv ? 1 : Math.max(0, 1 - normalizedDelta);
-      phaseQualities[f] += quality * w;
-      phaseWeightSum[f] += w;
+      const q=inEnv?1:Math.max(0,1-nd);
+      phaseQ[f]+=q*w; phaseW[f]+=w;
     }
+    if(!total) continue;
 
-    if (featTotal === 0) continue;
-
-    const meanDelta = nDelta > 0 ? sumDelta / nDelta : 0;
-    // Frame score: fraction within envelope, penalized by mean deviation
-    const frameScore = Math.max(0, (featTotal - featAbove - featBelow) / featTotal);
-    const severity = meanDelta * w;
-
+    const meanDelta=sumDelta/total;
+    const frameScore=Math.max(0,(total-above-below)/total);
     deviations.push({
-      feature: feat,
-      direction: featAbove > featBelow ? "high" : "low",
-      severity: Math.round(severity * 100) / 10,
-      mean_delta: Math.round((worstDelta) * 10) / 10,
-      phase: worstPhase,
-      frame_score: frameScore,
+      feature:feat, direction:above>below?"high":"low",
+      severity:Math.round(meanDelta*w*100)/10,
+      mean_delta:Math.round(worstD*10)/10,
+      phase:worstPhase, frame_score:frameScore,
     });
-
-    totalWeight   += w;
-    weightedScore += frameScore * w;
+    totalW+=w; weightedScore+=frameScore*w;
   }
 
-  // Overall score 0-100
-  const rawScore = totalWeight > 0 ? weightedScore / totalWeight : 0;
-  const score = Math.round(rawScore * 100);
+  const score=Math.round(totalW>0?weightedScore/totalW*100:0);
+  const grade=score>=90?"A+":score>=85?"A":score>=80?"A-":score>=75?"B+":score>=70?"B":
+              score>=65?"B-":score>=60?"C+":score>=55?"C":score>=50?"C-":"D";
 
-  const grade = score >= 90 ? "A+" : score >= 85 ? "A" : score >= 80 ? "A-"
-    : score >= 75 ? "B+" : score >= 70 ? "B" : score >= 65 ? "B-"
-    : score >= 60 ? "C+" : score >= 55 ? "C" : score >= 50 ? "C-" : "D";
+  const totalFrames=FEATURES.reduce((s,feat)=>{const v=normSwing[feat];return s+(v?v.filter(x=>!isNaN(x)).length:0);},0);
+  const in_envelope_pct=totalFrames>0?Math.round(framesIn/totalFrames*1000)/10:0;
+  const phaseBar=Array.from({length:N_FRAMES},(_,f)=>phaseW[f]>0?phaseQ[f]/phaseW[f]:0.5);
 
-  const totalFrames = FEATURES.reduce((sum, feat) => {
-    const vals = normalizedSwing[feat];
-    return sum + (vals ? vals.filter(v => !isNaN(v)).length : 0);
-  }, 0);
-  const in_envelope_pct = totalFrames > 0
-    ? Math.round(framesInEnvelope / totalFrames * 1000) / 10
-    : 0;
+  deviations.sort((a,b)=>b.severity-a.severity);
+  console.log(`[golf-coach] Score: ${score} (${grade}), envelope: ${in_envelope_pct}%`);
+  return { score, grade, in_envelope_pct, top3:deviations.slice(0,3), deviations, phaseBar };
+}
 
-  // Normalize phase quality bar
-  const phaseBar = Array.from({length: N_FRAMES}, (_, f) =>
-    phaseWeightSum[f] > 0 ? phaseQualities[f] / phaseWeightSum[f] : 0.5
-  );
+// ─────────────────────────────────────────
+//  Radar chart — 6 key features vs pro P50
+// ─────────────────────────────────────────
+const RADAR_FEATURES = ["spine_tilt","x_factor","lead_elbow","trail_elbow","lead_knee_flex","hand_height"];
+const RADAR_LABELS   = ["Spine Tilt","X-Factor","Lead Elbow","Trail Elbow","Lead Knee","Hand Height"];
 
-  // Top 3 deviations by severity
-  deviations.sort((a, b) => b.severity - a.severity);
-  const top3 = deviations.slice(0, 3);
+function featureProximityScore(val, p25, p50, p75) {
+  // 100 = exactly p50, 50 = at the envelope edge, 0 = 1 IQR outside
+  if (isNaN(val)) return 50;
+  const iqr = Math.max(p75-p25, 1);
+  const delta = Math.abs(val - p50);
+  return Math.max(0, Math.round(100 - (delta/(iqr*0.5))*50));
+}
 
-  console.log(`[golf-coach] Score: ${score} (${grade}), in-envelope: ${in_envelope_pct}%`);
-  console.log(`[golf-coach] Top deviations:`, top3);
+function renderRadar(normSwing, model) {
+  const { envelope } = model;
+  const impact = IMPACT_FRAME;
 
-  return { score, grade, in_envelope_pct, top3, deviations, phaseBar };
+  const userScores = RADAR_FEATURES.map(feat => {
+    const val = normSwing[feat]?.[impact] ?? NaN;
+    const env = envelope[feat];
+    if (!env) return 50;
+    return featureProximityScore(val, env.p25[impact], env.p50[impact], env.p75[impact]);
+  });
+
+  const proScores = RADAR_FEATURES.map(() => 100); // P50 is always 100% "on"
+
+  if (radarChartInst) radarChartInst.destroy();
+
+  radarChartInst = new Chart(document.getElementById("radarChart"), {
+    type: "radar",
+    data: {
+      labels: RADAR_LABELS,
+      datasets: [
+        {
+          label: "You",
+          data: userScores,
+          backgroundColor: "rgba(201,168,76,0.15)",
+          borderColor: "#c9a84c",
+          borderWidth: 2,
+          pointBackgroundColor: "#c9a84c",
+          pointRadius: 4,
+        },
+        {
+          label: "Pro P50",
+          data: proScores,
+          backgroundColor: "rgba(61,122,82,0.15)",
+          borderColor: "rgba(61,122,82,0.6)",
+          borderWidth: 1.5,
+          borderDash: [4,3],
+          pointBackgroundColor: "rgba(61,122,82,0.7)",
+          pointRadius: 3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        r: {
+          min: 0, max: 100,
+          ticks: { stepSize:25, color:"#9bb5a5", font:{size:8}, backdropColor:"transparent" },
+          grid:        { color:"rgba(61,122,82,0.4)" },
+          angleLines:  { color:"rgba(61,122,82,0.4)" },
+          pointLabels: { color:"#faf7f2", font:{size:9, family:"DM Mono"} },
+        },
+      },
+      plugins: {
+        legend: {
+          labels: { color:"#9bb5a5", font:{size:9, family:"DM Mono"}, boxWidth:10 },
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${ctx.raw}/100`,
+          },
+        },
+      },
+    },
+  });
+}
+
+// ─────────────────────────────────────────
+//  Feature comparison bars
+// ─────────────────────────────────────────
+function renderFeatureBars(normSwing, model) {
+  const { envelope } = model;
+  const container = document.getElementById("featureBars");
+  container.innerHTML = "";
+  const impact = IMPACT_FRAME;
+
+  for (const feat of FEATURES) {
+    const env = envelope[feat];
+    if (!env) continue;
+    const p25=env.p25[impact], p50=env.p50[impact], p75=env.p75[impact];
+    const iqr = Math.max(p75-p25, 1);
+    const userVal = normSwing[feat]?.[impact] ?? NaN;
+
+    // Display range: p50 ± 2.5 IQR
+    const displayMin = p50 - 2.5*iqr;
+    const displayMax = p50 + 2.5*iqr;
+    const displayRange = displayMax - displayMin;
+
+    const toPercent = v => Math.max(0, Math.min(100, (v-displayMin)/displayRange*100));
+    const proLeft   = toPercent(p25);
+    const proWidth  = toPercent(p75) - proLeft;
+    const userLeft  = isNaN(userVal) ? 50 : toPercent(userVal);
+
+    const inEnv  = !isNaN(userVal) && userVal>=p25 && userVal<=p75;
+    const nearEnv= !isNaN(userVal) && Math.abs(userVal-p50) <= iqr;
+    const quality= inEnv?"in": nearEnv?"near":"out";
+    const score  = featureProximityScore(userVal, p25, p50, p75);
+
+    const row = document.createElement("div");
+    row.className = "feat-row";
+    row.innerHTML = `
+      <span class="feat-label">${feat.replace(/_/g," ")}</span>
+      <div class="feat-bar-wrap">
+        <div class="feat-bar-pro"  style="left:${proLeft}%;width:${proWidth}%"></div>
+        <div class="feat-bar-user ${quality}" style="left:${userLeft}%"
+             title="${isNaN(userVal)?'no data':userVal.toFixed(1)}°  pro P50: ${p50.toFixed(1)}°"></div>
+      </div>
+      <span class="feat-score ${quality}">${score}</span>`;
+    container.appendChild(row);
+  }
 }
 
 // ─────────────────────────────────────────
 //  Synthetic fallback envelope
-//  SYNTHETIC DATA — not derived from real pro swings.
-//  Used only when reference_model.json cannot be loaded.
+//  SYNTHETIC DATA — not from real pro swings.
 // ─────────────────────────────────────────
 function buildSyntheticEnvelope() {
-  console.warn("[golf-coach] Using SYNTHETIC fallback envelope — run build_reference_model.py for real data");
+  console.warn("[golf-coach] Using SYNTHETIC fallback — run build_reference_model.py for real data");
   log("Using synthetic reference model (run build_reference_model.py for real data)", "warn");
-
-  // Approximate P50 values at address (frame 0), top (frame 40), impact (frame 75), finish (frame 99)
-  // for a typical right-handed tour player. Values are degrees except hand_height (normalized).
-  const syntheticKeyframes = {
-    // feature: [address, takeaway, top, transition, impact, follow, finish]
-    //           f=0       f=15     f=40  f=55         f=75   f=85    f=99
-    lead_elbow:       [160, 145, 130, 140, 170, 150, 120],
-    trail_elbow:      [155, 120, 90,  100, 140, 130, 100],
-    lead_wrist_angle: [ 60,  55,  50,  55,  65,  60,  50],
-    trail_wrist_angle:[ 55,  50,  45,  50,  60,  55,  45],
-    lead_knee_flex:   [155, 155, 150, 145, 160, 155, 145],
-    trail_knee_flex:  [155, 150, 145, 140, 155, 160, 155],
-    spine_tilt:       [ 25,  25,  28,  27,  24,  25,  30],
-    hip_rotation:     [  0,  -5, -30, -20,  30,  45,  60],
-    shoulder_rotation:[  0, -10, -50, -45,  20,  35,  55],
-    x_factor:         [  0,  -5, -20, -25, -10,  -8,  -5],
-    hand_height:      [  0,   0,   1,  0.8,  0.1, 0.4, 1.2],
+  const kf=[0,15,40,55,75,85,99];
+  const kv={
+    lead_elbow:[160,165,147,150,129,145,135],trail_elbow:[166,156,134,134,127,128,94],
+    lead_wrist_angle:[14,8,16,15,17,14,22],trail_wrist_angle:[8,14,22,25,18,27,40],
+    lead_knee_flex:[153,154,152,149,158,156,166],trail_knee_flex:[160,152,151,150,164,165,161],
+    spine_tilt:[34,33,29,31,27,20,12],hip_rotation:[16,16,14,13,-19,11,26],
+    shoulder_rotation:[-9,-13,-15,-17,-5,9,44],x_factor:[-20,-11,-34,-30,9,25,17],
+    hand_height:[-1.2,-1.1,0.3,0,0,0.4,0.3],
   };
-  const keyFrameIdxs = [0, 15, 40, 55, 75, 85, 99];
-
-  function interpFeature(keyvals) {
-    // Linear interpolation of keyframe values to N_FRAMES
-    const out = new Float32Array(N_FRAMES);
-    for (let f = 0; f < N_FRAMES; f++) {
-      let lo = 0, hi = keyFrameIdxs.length - 1;
-      for (let i = 0; i < keyFrameIdxs.length - 1; i++) {
-        if (keyFrameIdxs[i] <= f && f <= keyFrameIdxs[i+1]) { lo = i; hi = i+1; break; }
-      }
-      const t = (f - keyFrameIdxs[lo]) / (keyFrameIdxs[hi] - keyFrameIdxs[lo] + 1e-6);
-      out[f] = keyvals[lo] + t * (keyvals[hi] - keyvals[lo]);
-    }
-    return out;
-  }
-
-  const envelope = {};
-  const spread = { // half-width of IQR (p75-p25)/2 per feature
-    lead_elbow: 15, trail_elbow: 18, lead_wrist_angle: 12, trail_wrist_angle: 12,
-    lead_knee_flex: 10, trail_knee_flex: 10, spine_tilt: 8,
-    hip_rotation: 12, shoulder_rotation: 15, x_factor: 10, hand_height: 0.25,
-  };
-
+  const sp={lead_elbow:15,trail_elbow:18,lead_wrist_angle:12,trail_wrist_angle:12,
+            lead_knee_flex:10,trail_knee_flex:10,spine_tilt:8,hip_rotation:12,
+            shoulder_rotation:15,x_factor:10,hand_height:0.25};
+  const envelope={};
   for (const feat of FEATURES) {
-    const p50 = interpFeature(syntheticKeyframes[feat]);
-    const s = spread[feat] ?? 10;
-    envelope[feat] = {
-      p25: Array.from(p50).map(v => parseFloat((v - s).toFixed(4))),
-      p50: Array.from(p50).map(v => parseFloat(v.toFixed(4))),
-      p75: Array.from(p50).map(v => parseFloat((v + s).toFixed(4))),
+    const p50=new Float32Array(N_FRAMES);
+    for (let f=0;f<N_FRAMES;f++) {
+      let lo=0,hi=kf.length-1;
+      for(let i=0;i<kf.length-1;i++){if(kf[i]<=f&&f<=kf[i+1]){lo=i;hi=i+1;break;}}
+      const t=(f-kf[lo])/(kf[hi]-kf[lo]+1e-6);
+      p50[f]=kv[feat][lo]+t*(kv[feat][hi]-kv[feat][lo]);
+    }
+    const s=sp[feat]??10;
+    envelope[feat]={
+      p25:Array.from(p50).map(v=>parseFloat((v-s).toFixed(4))),
+      p50:Array.from(p50).map(v=>parseFloat(v.toFixed(4))),
+      p75:Array.from(p50).map(v=>parseFloat((v+s).toFixed(4))),
     };
   }
-
-  return {
-    version: "synthetic",
-    n_swings: 0,
-    n_frames: N_FRAMES,
-    impact_frame: IMPACT_FRAME,
-    features: FEATURES,
-    envelope,
-    weights: Object.fromEntries(FEATURES.map(f => [f, 1.0])),
-    metadata: { camera_angles: [], n_players: 0 },
-  };
+  return {version:"synthetic",club_type:"combined",n_swings:0,n_frames:N_FRAMES,impact_frame:IMPACT_FRAME,
+          features:FEATURES,envelope,weights:Object.fromEntries(FEATURES.map(f=>[f,1.0])),
+          metadata:{camera_angles:[],n_players:0}};
 }
 
 // ─────────────────────────────────────────
-//  Initialize MediaPipe PoseLandmarker
+//  Model loading
+// ─────────────────────────────────────────
+async function loadModels() {
+  log("Loading reference models...");
+  const files = [
+    ["combined", "/reference_model.json"],
+    ["driver",   "/reference_model_driver.json"],
+    ["iron",     "/reference_model_iron.json"],
+  ];
+  for (const [key, url] of files) {
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      models[key] = await resp.json();
+      log(`${key} model loaded — ${models[key].n_swings} swings`, "ok");
+    } catch (e) {
+      console.warn(`[golf-coach] Could not load ${url}:`, e.message);
+      if (key === "combined") {
+        models.combined = buildSyntheticEnvelope();
+      }
+    }
+  }
+  // If club-specific models failed, fall back to combined for both
+  if (!models.driver)  log("Driver model not found — using combined", "warn");
+  if (!models.iron)    log("Iron model not found — using combined",   "warn");
+}
+
+// ─────────────────────────────────────────
+//  MediaPipe init
 // ─────────────────────────────────────────
 async function initMediaPipe() {
-  log("Loading MediaPipe PoseLandmarker (lite)...");
+  log("Loading MediaPipe PoseLandmarker...");
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
   );
@@ -1011,43 +977,26 @@ async function initMediaPipe() {
     runningMode: "VIDEO",
     numPoses: 1,
     minPoseDetectionConfidence: 0.5,
-    minPosePresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
+    minPosePresenceConfidence:  0.5,
+    minTrackingConfidence:      0.5,
   });
-  console.log("[golf-coach] MediaPipe PoseLandmarker loaded");
   log("MediaPipe ready", "ok");
 }
 
 // ─────────────────────────────────────────
-//  Load reference model
-// ─────────────────────────────────────────
-async function loadReferenceModel() {
-  log("Loading reference model...");
-  try {
-    const resp = await fetch("/reference_model.json");
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    referenceModel = await resp.json();
-    log(`Reference model loaded — ${referenceModel.n_swings} pro swings`, "ok");
-    console.log(`[golf-coach] Reference model v${referenceModel.version}, ${referenceModel.n_swings} swings`);
-  } catch (e) {
-    console.warn("[golf-coach] Could not load reference_model.json:", e.message);
-    referenceModel = buildSyntheticEnvelope();
-  }
-}
-
-// ─────────────────────────────────────────
-//  Camera setup
+//  Camera
 // ─────────────────────────────────────────
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
-    log("Camera API unavailable — open http://localhost:8080 in Chrome (not Safari, not an IP address)", "err");
-    log("You can still use the Upload Video button to analyze a recorded swing", "warn");
-    setStatus("", "No camera API — use Upload");
+    log("Camera API unavailable — open http://localhost:8080 in Chrome", "err");
+    log("You can still use Upload Video to analyze a recorded swing", "warn");
+    setStatus("", "No camera — use Upload");
     recordBtn.disabled = true;
     return;
   }
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
+    const stream2 = await navigator.mediaDevices.getUserMedia({ video:{width:1280,height:720}, audio:false });
+    stream = stream2;
     videoEl.srcObject = stream;
     videoEl.addEventListener("loadeddata", () => {
       poseCanvas.width  = videoEl.videoWidth;
@@ -1055,56 +1004,39 @@ async function startCamera() {
       startPoseLoop();
     });
     log("Camera started", "ok");
-  } catch (e) {
+  } catch(e) {
     log(`Camera error: ${e.message}`, "err");
-    if (e.name === "NotAllowedError") {
-      log("Camera permission denied — allow camera access in browser settings", "warn");
-    }
+    if (e.name==="NotAllowedError") log("Allow camera access in browser settings", "warn");
     setStatus("", "Camera unavailable — use Upload");
-    log("You can still use the Upload Video button to analyze a recorded swing", "warn");
+    log("You can still use Upload Video to analyze a recorded swing", "warn");
   }
 }
 
 // ─────────────────────────────────────────
-//  Real-time pose detection loop
+//  Real-time pose loop
 // ─────────────────────────────────────────
-const drawUtils = { instance: null };
-
+const drawUtils = { inst: null };
 function startPoseLoop() {
-  if (!drawUtils.instance) {
-    drawUtils.instance = new DrawingUtils(ctx);
-  }
-
+  if (!drawUtils.inst) drawUtils.inst = new DrawingUtils(ctx);
   function loop() {
-    if (videoEl.readyState < 2) { animFrameId = requestAnimationFrame(loop); return; }
-    if (videoEl.currentTime === lastVideoTime) { animFrameId = requestAnimationFrame(loop); return; }
+    if (videoEl.readyState < 2 || videoEl.currentTime === lastVideoTime) {
+      animFrameId = requestAnimationFrame(loop); return;
+    }
     lastVideoTime = videoEl.currentTime;
-
-    const ts = performance.now();
-    const result = poseLandmarker.detectForVideo(videoEl, ts);
-
-    // Draw skeleton overlay
+    const result = poseLandmarker.detectForVideo(videoEl, performance.now());
     ctx.clearRect(0, 0, poseCanvas.width, poseCanvas.height);
     if (result.landmarks?.length) {
-      drawUtils.instance.drawConnectors(
-        result.landmarks[0],
-        PoseLandmarker.POSE_CONNECTIONS,
-        { color: "#00c853", lineWidth: 2 }
-      );
-      drawUtils.instance.drawLandmarks(result.landmarks[0], {
-        color: "#00bcd4", lineWidth: 1, radius: 3
-      });
-
-      // Collect frame during recording
+      drawUtils.inst.drawConnectors(result.landmarks[0], PoseLandmarker.POSE_CONNECTIONS,
+        { color:"#00c853", lineWidth:2 });
+      drawUtils.inst.drawLandmarks(result.landmarks[0],
+        { color:"#00bcd4", lineWidth:1, radius:3 });
       if (isRecording && result.worldLandmarks?.length) {
         const angles = extractAngles(result.worldLandmarks[0], result.landmarks[0]);
         if (angles) liveFrames.push(angles);
       }
     }
-
     animFrameId = requestAnimationFrame(loop);
   }
-
   animFrameId = requestAnimationFrame(loop);
   recordBtn.disabled = false;
   setStatus("ready", "Ready");
@@ -1114,23 +1046,15 @@ function startPoseLoop() {
 //  Recording
 // ─────────────────────────────────────────
 function startRecording() {
-  liveFrames = [];
-  isRecording = true;
-  recordBtn.disabled = true;
-  stopBtn.classList.add("show");
+  liveFrames = []; isRecording = true;
+  recordBtn.disabled = true; stopBtn.classList.add("show");
   analysisBtn.classList.remove("show");
-  recOverlay.classList.add("show");
-  countdownEl.style.display = "block";
+  recOverlay.classList.add("show"); countdownEl.style.display = "block";
   setStatus("recording", "Recording...");
-  log("Recording started");
-
-  let secondsLeft = MAX_RECORDING_SECONDS;
-  countdownEl.textContent = `${secondsLeft}s`;
-  recordingTimer = setInterval(() => {
-    secondsLeft--;
-    countdownEl.textContent = `${secondsLeft}s`;
-    if (secondsLeft <= 0) stopRecording();
-  }, 1000);
+  log(`Recording ${selectedClub} swing...`);
+  let s = MAX_RECORDING_SECONDS;
+  countdownEl.textContent = `${s}s`;
+  recordingTimer = setInterval(() => { s--; countdownEl.textContent=`${s}s`; if(s<=0) stopRecording(); }, 1000);
 }
 
 function stopRecording() {
@@ -1140,93 +1064,49 @@ function stopRecording() {
   stopBtn.classList.remove("show");
   recOverlay.classList.remove("show");
   countdownEl.style.display = "none";
-  setStatus("ready", "Ready");
-
-  log(`Recorded ${liveFrames.length} frames`, liveFrames.length >= 20 ? "ok" : "warn");
-
-  if (liveFrames.length >= 20) {
-    analysisBtn.classList.add("show");
-  } else {
-    log("Not enough frames detected — try again in better lighting", "err");
-    recordBtn.disabled = false;
-  }
+  setStatus("ready","Ready");
+  log(`Captured ${liveFrames.length} frames`, liveFrames.length>=20?"ok":"warn");
+  if (liveFrames.length >= 20) analysisBtn.classList.add("show");
+  else { log("Too few frames — try again in better lighting","err"); recordBtn.disabled=false; }
 }
 
 // ─────────────────────────────────────────
-//  Upload video processing
+//  Upload
 // ─────────────────────────────────────────
 async function processUploadedVideo(file) {
-  log(`Processing uploaded video: ${file.name}`);
-  setStatus("processing", "Processing video...");
-  recordBtn.disabled = true;
-  analysisBtn.classList.remove("show");
-
+  log(`Processing: ${file.name}`);
+  setStatus("processing","Processing video..."); recordBtn.disabled=true; analysisBtn.classList.remove("show");
   const url = URL.createObjectURL(file);
-
-  // Create an off-screen video element for frame extraction
-  const vid = document.createElement("video");
-  vid.src = url;
-  vid.muted = true;
-  vid.preload = "auto";
-
-  // Need a different PoseLandmarker running mode for offline video
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
   );
-  const offlineLandmarker = await PoseLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-      delegate: "GPU",
-    },
-    runningMode: "VIDEO",
-    numPoses: 1,
-    minPoseDetectionConfidence: 0.5,
-    minPosePresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
+  const offlineLm = await PoseLandmarker.createFromOptions(vision, {
+    baseOptions: { modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task", delegate:"GPU" },
+    runningMode:"VIDEO", numPoses:1,
+    minPoseDetectionConfidence:0.5, minPosePresenceConfidence:0.5, minTrackingConfidence:0.5,
   });
-
-  await new Promise(res => { vid.addEventListener("loadedmetadata", res); });
-
-  const frames = [];
-  const fps = 30;
-  const duration = vid.duration;
-  const totalFrames = Math.floor(duration * fps);
-  log(`Video: ${duration.toFixed(1)}s, ~${totalFrames} frames`);
-
-  // Seek through video frame by frame
-  for (let i = 0; i < totalFrames; i++) {
-    vid.currentTime = i / fps;
-    await new Promise(res => vid.addEventListener("seeked", res, { once: true }));
-
-    const ts = i * (1000 / fps);
-    const result = offlineLandmarker.detectForVideo(vid, ts);
+  const vid = document.createElement("video");
+  vid.src = url; vid.muted = true; vid.preload = "auto";
+  await new Promise(res => vid.addEventListener("loadedmetadata", res));
+  const fps=30, duration=vid.duration, total=Math.floor(duration*fps);
+  log(`Video: ${duration.toFixed(1)}s, ~${total} frames`);
+  const frames=[];
+  for (let i=0; i<total; i++) {
+    vid.currentTime = i/fps;
+    await new Promise(res => vid.addEventListener("seeked", res, {once:true}));
+    const result = offlineLm.detectForVideo(vid, i*(1000/fps));
     if (result.worldLandmarks?.length && result.landmarks?.length) {
-      const angles = extractAngles(result.worldLandmarks[0], result.landmarks[0]);
-      if (angles) frames.push(angles);
-    } else {
-      frames.push(null); // preserve timing even for missed frames
-    }
-
-    if (i % 30 === 0) log(`Processed ${i}/${totalFrames} frames...`);
+      const a=extractAngles(result.worldLandmarks[0], result.landmarks[0]);
+      if(a) frames.push(a); else frames.push(null);
+    } else frames.push(null);
+    if (i%30===0) log(`Processed ${i}/${total} frames...`);
   }
-
-  offlineLandmarker.close();
-  URL.revokeObjectURL(url);
-
-  const validFrames = frames.filter(Boolean);
-  log(`Valid frames with pose: ${validFrames.length}/${totalFrames}`, validFrames.length >= 20 ? "ok" : "err");
-
-  if (validFrames.length < 20) {
-    log("Too few valid frames — try a clearer video with full body visible", "err");
-    setStatus("ready", "Ready");
-    recordBtn.disabled = false;
-    return;
-  }
-
-  // Use only valid frames for analysis (gaps in tracking skipped)
-  liveFrames = frames.filter(Boolean);
-  analysisBtn.classList.add("show");
-  setStatus("ready", "Ready — click Analyze");
+  offlineLm.close(); URL.revokeObjectURL(url);
+  const valid=frames.filter(Boolean);
+  log(`Valid frames: ${valid.length}/${total}`, valid.length>=20?"ok":"err");
+  if (valid.length<20) { log("Too few valid frames — try a clearer video","err"); setStatus("ready","Ready"); recordBtn.disabled=false; return; }
+  liveFrames = valid;
+  analysisBtn.classList.add("show"); setStatus("ready","Ready — click Analyze");
 }
 
 // ─────────────────────────────────────────
@@ -1234,144 +1114,129 @@ async function processUploadedVideo(file) {
 // ─────────────────────────────────────────
 async function runAnalysis() {
   if (!liveFrames.length) return;
-  analysisBtn.classList.remove("show");
-  recordBtn.disabled = true;
-  setStatus("processing", "Analyzing swing...");
+  analysisBtn.classList.remove("show"); recordBtn.disabled=true;
+  setStatus("processing","Analyzing swing...");
+  resultsPlaceholder.style.display="none"; resultsContent.classList.add("show");
 
-  resultsPlaceholder.style.display = "none";
-  resultsContent.classList.add("show");
+  // Reset UI
+  document.getElementById("scoreRingArc").style.strokeDashoffset="226";
+  document.getElementById("scoreNumber").textContent="--";
+  document.getElementById("scoreGrade").textContent="-";
+  document.getElementById("summaryText").textContent="";
+  document.getElementById("coachingCards").innerHTML='<div style="font-size:0.75rem;color:var(--text-muted)"><span class="spinner"></span>Analyzing...</div>';
+  document.getElementById("phaseBar").innerHTML="";
+  document.getElementById("deviationList").innerHTML="";
+  document.getElementById("featureBars").innerHTML="";
 
-  // Reset score ring
-  document.getElementById("scoreRingArc").style.strokeDashoffset = "283";
-  document.getElementById("scoreNumber").textContent = "--";
-  document.getElementById("scoreGrade").textContent = "-";
-  document.getElementById("summaryText").textContent = "";
-  document.getElementById("coachingCards").innerHTML =
-    '<div style="font-size:0.75rem;color:var(--text-muted)"><span class="spinner"></span>Analyzing...</div>';
-  document.getElementById("phaseBar").innerHTML = "";
-  document.getElementById("deviationList").innerHTML = "";
+  const model = activeModel();
+  if (!model) { log("No reference model available","err"); return; }
 
-  log("Normalizing swing to 100 frames...");
-  const normalizedSwing = normalizeSwing(liveFrames);
+  log("Normalizing swing...");
+  const normSwing = normalizeSwing(liveFrames);
 
   log("Scoring against reference envelope...");
-  const { score, grade, in_envelope_pct, top3, deviations, phaseBar } =
-    scoreSwing(normalizedSwing, referenceModel);
+  const { score, grade, in_envelope_pct, top3, deviations, phaseBar } = scoreSwing(normSwing, model);
 
-  // Animate score ring
-  // SVG circumference = 2π × 45 ≈ 283. dashoffset = 283 × (1 - score/100)
-  const offset = 283 * (1 - score / 100);
+  // Score ring — circumference = 2π×36 ≈ 226
+  const offset = 226 * (1 - score/100);
+  const ringColor = score>=75?"#c9a84c": score>=50?"#e8b84b":"#d64f3e";
+  document.getElementById("scoreRingArc").style.stroke = ringColor;
   document.getElementById("scoreNumber").textContent = score;
-  document.getElementById("scoreGrade").textContent = grade;
-  document.getElementById("envelopeStat").textContent =
-    `${in_envelope_pct}% of frames within pro envelope`;
-  setTimeout(() => {
-    document.getElementById("scoreRingArc").style.strokeDashoffset = offset;
-  }, 50);
+  document.getElementById("scoreGrade").textContent  = grade;
+  document.getElementById("envelopeStat").textContent = `${in_envelope_pct}% frames within pro envelope`;
+  const clubLabel = selectedClub === "driver" ? "🏌️ Driver" : "🎯 Iron";
+  document.getElementById("resultClubTag").textContent = `${clubLabel}  ·  ${model.n_swings} pro swings`;
+  setTimeout(() => { document.getElementById("scoreRingArc").style.strokeDashoffset = offset; }, 50);
 
-  // Phase timeline bar
+  // Radar chart
+  renderRadar(normSwing, model);
+
+  // Feature comparison bars
+  renderFeatureBars(normSwing, model);
+
+  // Phase timeline
   const barEl = document.getElementById("phaseBar");
-  barEl.innerHTML = "";
   phaseBar.forEach((q, i) => {
     const seg = document.createElement("div");
-    seg.className = `phase-seg ${q >= 0.75 ? "good" : q >= 0.45 ? "ok" : "bad"}`;
-    seg.title = `Frame ${i}: quality ${(q * 100).toFixed(0)}%`;
-    if (i === IMPACT_FRAME) seg.style.background = "white";
+    seg.className = `phase-seg ${q>=0.75?"good": q>=0.45?"ok":"bad"}`;
+    seg.title = `Frame ${i}: ${(q*100).toFixed(0)}%`;
+    if (i===IMPACT_FRAME) seg.style.background="white";
     barEl.appendChild(seg);
   });
 
-  // All deviations list
+  // Deviation list
   const devList = document.getElementById("deviationList");
   deviations.forEach(dev => {
-    const item = document.createElement("div");
-    item.className = "deviation-item";
-    item.innerHTML = `
+    const item=document.createElement("div"); item.className="deviation-item";
+    item.innerHTML=`
       <div class="deviation-header" onclick="this.parentElement.classList.toggle('open')">
-        <span class="dev-name">${dev.feature.replace(/_/g, " ")}</span>
+        <span class="dev-name">${dev.feature.replace(/_/g," ")}</span>
         <span class="dev-dir ${dev.direction}">${dev.direction}</span>
         <span class="dev-severity">severity ${dev.severity.toFixed(1)}</span>
         <span class="dev-chevron">&#8964;</span>
       </div>
       <div class="deviation-body">
-        Phase: ${dev.phase || "—"} &nbsp;|&nbsp;
+        Phase: ${dev.phase||"—"} &nbsp;|&nbsp;
         Avg deviation: ${dev.mean_delta}° &nbsp;|&nbsp;
-        Frame score: ${(dev.frame_score * 100).toFixed(0)}%
+        Frame score: ${(dev.frame_score*100).toFixed(0)}%
       </div>`;
     devList.appendChild(item);
   });
 
-  log(`Analysis complete — score ${score} (${grade})`, "ok");
-  setStatus("ready", "Ready");
-  recordBtn.disabled = false;
+  log(`Score: ${score} (${grade})`, "ok");
+  setStatus("ready","Ready"); recordBtn.disabled=false;
 
-  // Fetch coaching from Claude
-  log("Requesting coaching feedback from Claude...");
-  document.getElementById("coachingCards").innerHTML =
-    '<div style="font-size:0.75rem;color:var(--text-muted)"><span class="spinner"></span>Getting coaching feedback...</div>';
-
+  // Claude coaching
+  log("Requesting coaching from Claude...");
+  document.getElementById("coachingCards").innerHTML='<div style="font-size:0.75rem;color:var(--text-muted)"><span class="spinner"></span>Getting coaching feedback...</div>';
   try {
     const resp = await fetch("/api/feedback", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ score, grade, top_deviations: top3, in_envelope_pct }),
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ score, grade, top_deviations:top3, in_envelope_pct, club_type:selectedClub }),
     });
-
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ error: resp.statusText }));
-      throw new Error(err.error || resp.statusText);
-    }
-
+    if (!resp.ok) { const e=await resp.json().catch(()=>({error:resp.statusText})); throw new Error(e.error||resp.statusText); }
     const coaching = await resp.json();
-    renderCoaching(coaching, score);
-    log("Coaching feedback received", "ok");
-  } catch (e) {
-    log(`Coaching error: ${e.message}`, "err");
-    document.getElementById("coachingCards").innerHTML =
-      `<div style="font-size:0.75rem;color:var(--text-muted)">Coaching unavailable: ${e.message}</div>`;
+    renderCoaching(coaching);
+    log("Coaching received", "ok");
+  } catch(e) {
+    log(`Coaching error: ${e.message}`,"err");
+    document.getElementById("coachingCards").innerHTML=`<div style="font-size:0.75rem;color:var(--text-muted)">Coaching unavailable: ${e.message}</div>`;
   }
 }
 
-function renderCoaching(coaching, score) {
-  const summaryEl = document.getElementById("summaryText");
-  summaryEl.textContent = coaching.summary || "";
-
+function renderCoaching(coaching) {
+  document.getElementById("summaryText").textContent = coaching.summary || "";
   const container = document.getElementById("coachingCards");
   container.innerHTML = "";
-
-  (coaching.coaching || []).forEach((item, i) => {
-    const card = document.createElement("div");
-    card.className = "coaching-card";
-    card.innerHTML = `
-      <div class="priority-badge">${item.priority}</div>
+  (coaching.coaching||[]).forEach((item,i) => {
+    const card=document.createElement("div"); card.className="coaching-card";
+    card.innerHTML=`<div class="priority-badge">${item.priority}</div>
       <div class="coaching-card-body">
         <div class="coaching-headline">${item.headline}</div>
         <div class="coaching-cue">${item.cue}</div>
       </div>`;
     container.appendChild(card);
-    // Staggered fade-in
-    setTimeout(() => card.classList.add("visible"), i * 150 + 50);
+    setTimeout(()=>card.classList.add("visible"), i*150+50);
   });
 }
 
 // ─────────────────────────────────────────
-//  Event listeners
+//  Events
 // ─────────────────────────────────────────
 recordBtn.addEventListener("click", startRecording);
 stopBtn.addEventListener("click", stopRecording);
 analysisBtn.addEventListener("click", runAnalysis);
-
-fileInput.addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (file) await processUploadedVideo(file);
-  fileInput.value = "";
+fileInput.addEventListener("change", async e => {
+  const f=e.target.files[0]; if(f) await processUploadedVideo(f); fileInput.value="";
 });
 
 // ─────────────────────────────────────────
 //  Boot
 // ─────────────────────────────────────────
 (async () => {
-  setStatus("", "Loading MediaPipe...");
-  await Promise.all([initMediaPipe(), loadReferenceModel()]);
+  setStatus("","Loading...");
+  await Promise.all([initMediaPipe(), loadModels()]);
   await startCamera();
 })();
 </script>
