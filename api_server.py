@@ -57,6 +57,11 @@ def serve_index():
     return send_from_directory(str(ROOT), "index.html")
 
 
+@app.route("/manifest.json")
+def serve_manifest():
+    return send_from_directory(str(ROOT), "manifest.json")
+
+
 @app.route("/reference_model.json")
 def serve_model_combined():
     return _serve_model_file("reference_model.json")
@@ -148,4 +153,5 @@ if __name__ == "__main__":
         status = "✓" if (ROOT / fname).exists() else "✗ (not built yet)"
         print(f"  {fname}: {status}")
     print()
-    app.run(host="0.0.0.0", port=8080, debug=False)
+    port = int(os.getenv("PORT", 8080))
+    app.run(host="0.0.0.0", port=port, debug=False)
