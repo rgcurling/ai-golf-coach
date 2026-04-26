@@ -10,3 +10,7 @@ pro_swings/*.mkv
 
 # MediaPipe model binary — auto-downloaded by build_reference_model.py
 pose_landmarker_heavy.task
+
+# Generated outputs
+reference_model_plot.png
+.DS_Store
