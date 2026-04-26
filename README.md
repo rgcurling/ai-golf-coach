@@ -1,84 +1,161 @@
 # AI Golf Coach
 
-A browser-based golf swing analyzer that uses MediaPipe Pose (client-side) to extract joint angles from your webcam, compares them frame-by-frame against a reference envelope built from real professional golfer swing videos, and delivers Claude-powered plain-English coaching feedback. This is a portfolio project demonstrating a full computer vision pipeline combined with LLM integration.
+A browser-based golf swing analyzer that uses MediaPipe Pose (client-side) to extract joint angles from your webcam, compares them frame-by-frame against per-club reference envelopes built from real professional golfer swing videos, and delivers Claude-powered plain-English coaching feedback.
+
+Built as a portfolio project demonstrating a full computer vision pipeline combined with LLM integration, a Supabase backend, and a Progressive Web App frontend.
+
+---
 
 ## Prerequisites
 
 - Python 3.10+
 - Chrome (required for MediaPipe's WASM + GPU delegate)
-- An Anthropic API key
+- An [Anthropic API key](https://console.anthropic.com/)
+- (Optional) A [Supabase](https://supabase.com/) project for swing storage and caching
+
+---
 
 ## Quick Start
 
 ```bash
-# 1. Install dependencies and create venv
+# 1. Install dependencies
 python setup.py
-
-# 2. Activate the venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
-# 3. Add your API key
-echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
+# 2. Configure environment
+cp .env.example .env
+# Edit .env and add ANTHROPIC_API_KEY (and optionally SUPABASE_URL / SUPABASE_KEY)
 
-# 4. Download pro swing videos (~20-25 clips, 10-60s each)
-python fetch_pro_swings.py
+# 3. Download pro swing videos for a club
+python fetch_pro_swings.py --club driver
+python fetch_pro_swings.py --club mid_iron
 
-# 5. Build the reference envelope from downloaded videos
-python build_reference_model.py
+# 4. Build per-club reference models
+python build_reference_model.py --club driver
+python build_reference_model.py --club mid_iron
 
-# 6. Start the server
+# 5. Start the server
 python api_server.py
 
-# 7. Open in Chrome
+# 6. Open in Chrome
 open http://localhost:8080
 ```
+
+---
+
+## Building All Six Club Models
+
+The app supports six club categories, each with its own reference envelope and scoring weights:
+
+| Club | Download target | Fallback if not built |
+|---|---|---|
+| `driver` | 40 videos | — |
+| `fairway_wood` | 25 videos | driver |
+| `long_iron` | 25 videos | mid_iron |
+| `mid_iron` | 40 videos | — |
+| `short_iron` | 25 videos | mid_iron |
+| `wedge` | 30 videos | combined |
+
+**Recommended build order** (by impact on coaching quality):
+
+```bash
+# Core two — build these first
+python fetch_pro_swings.py --club driver   && python build_reference_model.py --club driver
+python fetch_pro_swings.py --club mid_iron && python build_reference_model.py --club mid_iron
+
+# High value — most mechanically distinct
+python fetch_pro_swings.py --club wedge      && python build_reference_model.py --club wedge
+python fetch_pro_swings.py --club short_iron && python build_reference_model.py --club short_iron
+
+# Lower priority — decent fallbacks already in place
+python fetch_pro_swings.py --club fairway_wood && python build_reference_model.py --club fairway_wood
+python fetch_pro_swings.py --club long_iron    && python build_reference_model.py --club long_iron
+
+# Or build everything at once
+python fetch_pro_swings.py --club all
+python build_reference_model.py --club all
+```
+
+Models are saved to `reference_models/{club}.json`. The server loads them all at startup and falls back gracefully when a club model hasn't been built yet.
+
+---
+
+## Supabase Setup (Optional)
+
+Supabase adds swing history, response caching, and per-IP daily rate limiting. The app works without it — all Supabase calls fail silently.
+
+**1. Create a project at [supabase.com](https://supabase.com) and run `setup_supabase.sql` in the SQL Editor.**
+
+**2. Add credentials to `.env`:**
+```
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-anon-key
+```
+
+**3. Verify the connection:**
+```bash
+python test_supabase.py
+```
+
+Features enabled with Supabase:
+- **Swing storage** — every analyzed swing is stored with score, deviations, and coaching feedback
+- **Response cache** — identical deviation patterns return cached coaching without a Claude API call
+- **Daily limit** — 5 free analyses per IP per day (configurable via `FREE_DAILY_LIMIT` in `api_server.py`)
+- **Stats endpoint** — `GET /api/stats` returns total swings, cached patterns, and cache hit count
+
+---
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  OFFLINE PIPELINE (run once, Python)                            │
+│  OFFLINE PIPELINE (run once per club, Python)                   │
 │                                                                 │
-│  YouTube ──► fetch_pro_swings.py ──► /pro_swings/*.mp4         │
+│  YouTube ──► fetch_pro_swings.py ──► pro_swings/{club}/*.mp4  │
 │                       │                                         │
 │                       ▼                                         │
-│            build_reference_model.py                             │
+│            build_reference_model.py --club {club}               │
 │            ┌─────────────────────┐                              │
-│            │  MediaPipe Pose     │  11 angles × 100 frames     │
-│            │  (complexity=2)     │  per swing                   │
-│            │  Impact detection   │  normalise to 100 frames    │
-│            │  P25/P50/P75 stats  │  impact @ frame 75          │
+│            │  MediaPipe Pose     │  12 features × 100 frames   │
+│            │  Impact detection   │  normalised, impact @ f75   │
+│            │  P25/P50/P75 stats  │  + tempo ratio stats        │
+│            │  Per-club weights   │                              │
 │            └──────────┬──────────┘                              │
-│                       │                                         │
 │                       ▼                                         │
-│              reference_model.json                               │
+│              reference_models/{club}.json                       │
 └───────────────────────┬─────────────────────────────────────────┘
-                        │  served as static file
+                        │  served as static files
 ┌───────────────────────▼─────────────────────────────────────────┐
 │  BROWSER (index.html, single file)                              │
 │                                                                 │
-│  getUserMedia ──► MediaPipe PoseLandmarker (lite, WASM/GPU)    │
+│  6-club selector ──► getUserMedia / video upload               │
 │                       │                                         │
-│                       │  11 angles per frame                    │
+│                       │  MediaPipe PoseLandmarker (lite/WASM)  │
+│                       │  12 features per frame                  │
 │                       ▼                                         │
-│              Normalize to 100 frames                            │
-│              Compare vs reference envelope                      │
-│              Weighted deviation scoring                         │
+│              Normalize to 100 frames (impact @ 75)             │
+│              Compare vs per-club reference envelope             │
+│              Weighted deviation scoring + tempo ratio           │
 │                       │                                         │
 │                       ▼                                         │
-│              Score + grade + phase timeline                     │
+│              Score + grade + radar chart + phase timeline       │
 └───────────────────────┬─────────────────────────────────────────┘
-                        │  POST /api/feedback
+                        │  POST /api/feedback  {club_category, tempo_ratio, ...}
 ┌───────────────────────▼─────────────────────────────────────────┐
 │  api_server.py  (Flask, port 8080)                              │
 │                                                                 │
-│  Rate limiting (10 req/IP/hr)                                   │
+│  In-memory rate limit (10 req/IP/hr)                           │
+│  Supabase daily limit (5 analyses/IP/day)                      │
+│  Supabase response cache (MD5 of deviation pattern + club)     │
 │  ──► Anthropic API (claude-sonnet-4-20250514)                  │
-│  ◄── 3 coaching points JSON                                     │
+│  ◄── 3 coaching points + optional tempo cue JSON               │
+│  Supabase swing storage                                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## The 11 Features
+---
+
+## The 12 Features
 
 | Feature | Description |
 |---|---|
@@ -93,28 +170,89 @@ open http://localhost:8080
 | `shoulder_rotation` | Shoulder open/close from z-depth delta |
 | `x_factor` | shoulder_rotation − hip_rotation (separation) |
 | `hand_height` | Avg wrist Y normalized to shoulder-hip range |
+| `tempo_ratio` | Backswing frames / downswing frames (constant per swing) |
 
-## Improving the Reference Model
+Feature weights are tuned per club — `x_factor` and `hip_rotation` are weighted highest for driver, `spine_tilt` and `trail_wrist_angle` for wedge.
 
-The quality of feedback is directly proportional to reference model quality:
+---
 
-1. **More videos**: Edit `MAX_VIDEOS` in `fetch_pro_swings.py` (currently 25)
-2. **Better search queries**: Add queries in `SEARCH_QUERIES` — look for face-on AND down-the-line views
-3. **Curate manually**: Delete bad files from `/pro_swings` and update `manifest.json`, then re-run `build_reference_model.py`
-4. **Add real player data**: If you have access to TrackMan or other biomechanics CSV exports, write a loader that feeds pre-extracted angles directly into the numpy array in `build_reference_model.py`
-5. **Camera angle filtering**: Currently mixes face-on and down-the-line. For production, split into two separate envelopes and detect the user's camera angle at recording time
+## Per-Club Scoring Weights
+
+Each model blends consistency-based weights (features more consistent across pros score higher) with club-specific importance weights:
+
+| Feature | Driver | Mid Iron | Wedge |
+|---|---|---|---|
+| x_factor | 2.0 | 1.6 | 1.2 |
+| spine_tilt | 1.4 | 1.8 | 2.0 |
+| hip_rotation | 1.8 | 1.4 | 1.3 |
+| trail_wrist_angle | 1.0 | 1.3 | 1.8 |
+| tempo_ratio | 1.5 | 1.4 | 1.6 |
+
+---
+
+## Coaching Cache
+
+Pre-generate 396 coaching cues (6 clubs × 11 features × 2 directions × 3 severities) using Claude Haiku to reduce live API costs:
+
+```bash
+python generate_coaching_cache.py
+```
+
+Saves to `app/coaching_cache.json`. Resumes from checkpoint if interrupted. Estimated cost: ~$0.012 for the full set.
+
+---
+
+## Deployment (Railway)
+
+```bash
+# Set environment variables in Railway dashboard:
+# ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_KEY
+
+# Deploy
+railway up
+```
+
+The `Procfile` runs gunicorn with a single worker. Railway provides HTTPS automatically, which is required for `getUserMedia` on mobile browsers.
+
+---
 
 ## Project Structure
 
 ```
 ai-golf-coach/
-├── index.html               # Single-file browser app
-├── api_server.py            # Flask proxy + static file server
-├── fetch_pro_swings.py      # yt-dlp video downloader
-├── build_reference_model.py # MediaPipe pipeline + envelope builder
-├── setup.py                 # Venv + dependency installer
-├── reference_model.json     # Generated — commit after building
-├── .env                     # ANTHROPIC_API_KEY (never commit)
-├── .env.example             # Template
-└── pro_swings/              # Downloaded videos + manifest.json
+├── index.html                    # Single-file browser app (MediaPipe + UI)
+├── api_server.py                 # Flask server, Claude proxy, Supabase integration
+├── fetch_pro_swings.py           # yt-dlp downloader — python fetch_pro_swings.py --club <club>
+├── build_reference_model.py      # MediaPipe pipeline — python build_reference_model.py --club <club>
+├── generate_coaching_cache.py    # Pre-generate 396 coaching cues via Claude Haiku
+├── setup.py                      # Venv + dependency installer
+├── setup_supabase.sql            # Database schema (run once in Supabase SQL Editor)
+├── test_supabase.py              # Connection verification
+├── inspect_model.py              # Debug/analyse a built reference model
+├── manifest.json                 # PWA manifest
+├── Procfile                      # gunicorn config for Railway
+├── requirements.txt              # Python dependencies
+├── .env.example                  # Environment variable template
+├── reference_models/             # Built per-club envelopes (committed)
+│   ├── driver.json
+│   ├── mid_iron.json
+│   ├── wedge.json
+│   └── short_iron.json
+├── pro_swings/                   # Downloaded videos (not committed) + manifests
+│   ├── driver/manifest.json
+│   ├── mid_iron/manifest.json
+│   ├── wedge/manifest.json
+│   └── short_iron/manifest.json
+└── app/
+    └── coaching_cache.json       # Generated coaching cues (optional)
 ```
+
+---
+
+## Improving Model Quality
+
+1. **More videos** — increase `target_videos` in `CLUB_CONFIGS` inside `fetch_pro_swings.py`
+2. **Better queries** — add more specific player/angle queries to `CLUB_CONFIGS`
+3. **Curate manually** — delete low-quality files from `pro_swings/{club}/`, update `manifest.json`, rebuild
+4. **Camera angle filtering** — currently mixes face-on and down-the-line views; splitting into separate envelopes and detecting the user's angle at record time would improve accuracy
+5. **Real biomechanics data** — if you have TrackMan or force-plate CSV exports, write a loader that feeds pre-extracted angles directly into the numpy pipeline in `build_reference_model.py`
