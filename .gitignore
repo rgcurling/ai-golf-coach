@@ -1,0 +1,7 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+pro_swings/*.mp4
+pro_swings/*.webm
+pro_swings/*.mkv
