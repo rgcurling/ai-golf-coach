@@ -14,15 +14,36 @@ from datetime import datetime
 
 OUTPUT_DIR = Path("pro_swings")
 MANIFEST_FILE = OUTPUT_DIR / "manifest.json"
-MAX_VIDEOS = 25
+MAX_VIDEOS = 30
 
-# Search queries targeting high-quality, analyzable pro swings
+# Targeted queries for specific tour pros — mix of DTL and face-on, mix of body types.
+# Each query aims for a single clean swing clip, not a compilation.
 SEARCH_QUERIES = [
-    "PGA tour slow motion swing down the line",
-    "professional golf swing face on slow motion",
-    "tour pro golf swing analysis side view",
-    "golf swing slow motion 4k down the line",
-    "PGA pro swing slow motion face on",
+    # Rory McIlroy — upright, high-speed, great x-factor
+    "Rory McIlroy slow motion swing down the line",
+    "Rory McIlroy swing face on slow motion",
+    # Jon Rahm — powerful, compact, aggressive hip clearance
+    "Jon Rahm slow motion golf swing down the line",
+    "Jon Rahm golf swing face on slow motion",
+    # Scottie Scheffler — world number 1, textbook mechanics
+    "Scottie Scheffler slow motion swing down the line",
+    "Scottie Scheffler golf swing face on slow motion",
+    # Justin Thomas — tour tempo, excellent wrist mechanics
+    "Justin Thomas slow motion golf swing down the line",
+    "Justin Thomas golf swing face on slow motion",
+    # Collin Morikawa — precision iron play, very consistent
+    "Collin Morikawa slow motion golf swing",
+    # Xander Schauffele — athletic rotation, great footwork
+    "Xander Schauffele slow motion golf swing down the line",
+    # Fred Couples — silky tempo, great for contrast with power hitters
+    "Fred Couples slow motion golf swing",
+    # Ernie Els — the Big Easy, classic smooth swing
+    "Ernie Els slow motion golf swing",
+    # Adam Scott — textbook DTL poster swing
+    "Adam Scott slow motion golf swing down the line",
+    "Adam Scott golf swing face on slow motion",
+    # Nelly Korda — best women's swing for variety in the envelope
+    "Nelly Korda slow motion golf swing",
 ]
 
 # yt-dlp format: best video up to 720p, no audio needed
@@ -89,8 +110,8 @@ def search_and_download(query: str, existing_ids: set) -> list[dict]:
         except ValueError:
             continue
 
-        # Only keep videos between 10 and 60 seconds — longer vids are compilations
-        if not (10 <= duration <= 60):
+        # Only keep videos between 8 and 90 seconds — longer vids are compilations
+        if not (8 <= duration <= 90):
             continue
 
         candidates.append({

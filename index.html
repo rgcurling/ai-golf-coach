@@ -1039,6 +1039,13 @@ async function loadReferenceModel() {
 //  Camera setup
 // ─────────────────────────────────────────
 async function startCamera() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    log("Camera API unavailable — open http://localhost:8080 in Chrome (not Safari, not an IP address)", "err");
+    log("You can still use the Upload Video button to analyze a recorded swing", "warn");
+    setStatus("", "No camera API — use Upload");
+    recordBtn.disabled = true;
+    return;
+  }
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
     videoEl.srcObject = stream;
@@ -1050,7 +1057,11 @@ async function startCamera() {
     log("Camera started", "ok");
   } catch (e) {
     log(`Camera error: ${e.message}`, "err");
-    setStatus("", "Camera unavailable");
+    if (e.name === "NotAllowedError") {
+      log("Camera permission denied — allow camera access in browser settings", "warn");
+    }
+    setStatus("", "Camera unavailable — use Upload");
+    log("You can still use the Upload Video button to analyze a recorded swing", "warn");
   }
 }
 
