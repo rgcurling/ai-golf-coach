@@ -185,6 +185,21 @@
     display: none;
   }
 
+  /* ── Swing counter ── */
+  .swing-counter {
+    display: none;
+    align-items: center; justify-content: center; gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(201,168,76,0.08);
+    border: 1px solid rgba(201,168,76,0.25);
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+  }
+  .swing-counter.visible { display: flex; }
+  .swing-count-num { font-size: 1.5rem; font-weight: 700; color: var(--gold); line-height: 1; }
+  .swing-count-label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .per-swing-badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.07); margin: 0 2px; }
+
   /* ── Controls ── */
   .controls { display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; }
   button {
@@ -534,9 +549,15 @@
       </div>
     </div>
 
+    <!-- Swing counter -->
+    <div class="swing-counter" id="swingCounter">
+      <span class="swing-count-num" id="swingCountNum">0</span>
+      <span class="swing-count-label">swing<span id="swingCountPlural">s</span> recorded</span>
+    </div>
+
     <!-- Controls -->
     <div class="controls">
-      <button id="recordBtn" disabled>&#9679; Record Swing</button>
+      <button id="recordBtn" disabled>&#9679; Detect Swing</button>
       <button id="stopBtn">&#9632; Stop</button>
       <label class="upload-label" for="fileInput">&#8679; Upload Video</label>
       <input type="file" id="fileInput" accept="video/*">
@@ -579,6 +600,7 @@
           <div id="resultClubTag" class="result-club-tag"></div>
           <div class="summary-text"  id="summaryText"></div>
           <div class="envelope-stat" id="envelopeStat"></div>
+          <div id="perSwingScores" style="display:none; margin-top:6px; text-align:center;"></div>
         </div>
       </div>
 
@@ -646,7 +668,30 @@ let animFrameId     = null;
 let radarChartInst  = null;
 let cameraEnabled   = false;
 
-const MAX_RECORDING_SECONDS = 10;
+// Swing state machine
+let swingState    = 'DISARMED'; // DISARMED | ARMED | RECORDING | SETTLING
+let elbowHistory  = [];
+let preBuffer     = [];
+let motionFrames  = 0;
+let seenImpact    = false;
+let settleFrames  = 0;
+
+// Multi-swing session
+let swingHistory  = [];   // array of liveFrames per captured swing
+let sessionActive = false;
+let swingCount    = 0;
+
+const MAX_RECORDING_SECONDS = 10; // kept for manual stop fallback
+
+const SWING_SM = {
+  MOTION_VEL:     1.2,  // deg/frame avg (5-frame window) to leave ARMED
+  IMPACT_VEL:     8.0,  // deg/frame avg to confirm impact has occurred
+  SETTLE_VEL:     1.5,  // deg/frame avg to consider follow-through done
+  CONFIRM_FRAMES: 4,    // consecutive motion frames before recording starts
+  POST_SETTLE:    20,   // frames to capture after motion settles
+  PRE_BUFFER:     25,   // frames prepended before motion onset (address)
+  MAX_FRAMES:     330,  // safety cutoff (~11s at 30fps)
+};
 
 // ─────────────────────────────────────────
 //  DOM
@@ -1170,9 +1215,57 @@ function startPoseLoop() {
         { color:"#00c853", lineWidth:2 });
       drawUtils.inst.drawLandmarks(result.landmarks[0],
         { color:"#00bcd4", lineWidth:1, radius:3 });
-      if (isRecording && result.worldLandmarks?.length) {
+
+      if (swingState !== 'DISARMED' && result.worldLandmarks?.length) {
         const angles = extractAngles(result.worldLandmarks[0], result.landmarks[0]);
-        if (angles) liveFrames.push(angles);
+        if (angles) {
+          const elbow = angles.lead_elbow ?? NaN;
+
+          // 5-frame velocity window
+          elbowHistory.push(isNaN(elbow) ? (elbowHistory[elbowHistory.length-1] ?? 0) : elbow);
+          if (elbowHistory.length > 10) elbowHistory.shift();
+          const vel = elbowHistory.length >= 6
+            ? Math.abs(elbowHistory[elbowHistory.length-1] - elbowHistory[elbowHistory.length-6]) / 5
+            : 0;
+
+          if (swingState === 'ARMED') {
+            preBuffer.push(angles);
+            if (preBuffer.length > SWING_SM.PRE_BUFFER) preBuffer.shift();
+
+            if (vel > SWING_SM.MOTION_VEL) {
+              motionFrames++;
+              if (motionFrames >= SWING_SM.CONFIRM_FRAMES) {
+                liveFrames = [...preBuffer];
+                isRecording = true;
+                swingState = 'RECORDING';
+                seenImpact = false;
+                motionFrames = 0;
+                recOverlay.classList.add('show');
+                countdownEl.textContent = '';
+                setStatus('recording', 'Swing detected — recording...');
+                log('Swing detected', 'ok');
+              }
+            } else {
+              motionFrames = 0;
+            }
+
+          } else if (swingState === 'RECORDING') {
+            liveFrames.push(angles);
+            if (vel > SWING_SM.IMPACT_VEL) seenImpact = true;
+
+            if (seenImpact && vel < SWING_SM.SETTLE_VEL) {
+              swingState = 'SETTLING';
+              settleFrames = 0;
+            }
+
+            if (liveFrames.length > SWING_SM.MAX_FRAMES) finishSwing(seenImpact);
+
+          } else if (swingState === 'SETTLING') {
+            liveFrames.push(angles);
+            settleFrames++;
+            if (settleFrames >= SWING_SM.POST_SETTLE) finishSwing(true);
+          }
+        }
       }
     }
     animFrameId = requestAnimationFrame(loop);
@@ -1189,29 +1282,93 @@ function startPoseLoop() {
 // ─────────────────────────────────────────
 //  Recording
 // ─────────────────────────────────────────
+function updateSwingCounter() {
+  const el = document.getElementById("swingCounter");
+  document.getElementById("swingCountNum").textContent = swingCount;
+  document.getElementById("swingCountPlural").textContent = swingCount === 1 ? "" : "s";
+  el.classList.toggle("visible", swingCount > 0 || sessionActive);
+}
+
 function startRecording() {
-  liveFrames = []; isRecording = true;
-  recordBtn.disabled = true; stopBtn.classList.add("show");
+  swingHistory = []; liveFrames = []; preBuffer = []; elbowHistory = [];
+  swingCount = 0; sessionActive = true;
+  isRecording = false; swingState = 'ARMED';
+  motionFrames = 0; seenImpact = false; settleFrames = 0;
+  recordBtn.disabled = true;
+  stopBtn.classList.add("show");
   analysisBtn.classList.remove("show");
-  recOverlay.classList.add("show"); countdownEl.style.display = "block";
-  setStatus("recording", "Recording...");
-  log(`Recording ${selectedClub} swing...`);
-  let s = MAX_RECORDING_SECONDS;
-  countdownEl.textContent = `${s}s`;
-  recordingTimer = setInterval(() => { s--; countdownEl.textContent=`${s}s`; if(s<=0) stopRecording(); }, 1000);
+  countdownEl.style.display = "block";
+  countdownEl.textContent = "Watching...";
+  setStatus("recording", "Watching for swing...");
+  updateSwingCounter();
+  document.getElementById("perSwingScores").style.display = "none";
+  log(`Address the ball and swing your ${selectedClub.replace(/_/g," ")} — swing multiple times for a better analysis`);
+}
+
+function finishSwing(valid) {
+  clearInterval(recordingTimer);
+  isRecording = false;
+  preBuffer = []; elbowHistory = [];
+  recOverlay.classList.remove("show");
+
+  if (valid && liveFrames.length >= 20) {
+    swingHistory.push([...liveFrames]);
+    swingCount = swingHistory.length;
+    updateSwingCounter();
+    log(`Swing ${swingCount} captured — ${liveFrames.length} frames`, "ok");
+    analysisBtn.classList.add("show");
+
+    if (sessionActive) {
+      liveFrames = []; motionFrames = 0; seenImpact = false; settleFrames = 0;
+      swingState = 'ARMED';
+      countdownEl.style.display = "block";
+      countdownEl.textContent = "Watching...";
+      setStatus("recording", `Swing ${swingCount} done — swing again or click Analyze`);
+    } else {
+      swingState = 'DISARMED';
+      stopBtn.classList.remove("show");
+      recordBtn.disabled = false;
+      countdownEl.style.display = "none";
+      setStatus("ready", "Ready — click Analyze");
+    }
+  } else {
+    log("Swing not captured — try again", "warn");
+    liveFrames = [];
+    if (sessionActive) {
+      motionFrames = 0; seenImpact = false; settleFrames = 0;
+      swingState = 'ARMED';
+      countdownEl.style.display = "block";
+      countdownEl.textContent = "Watching...";
+      setStatus("recording", "Watching for swing...");
+    } else {
+      swingState = 'DISARMED';
+      stopBtn.classList.remove("show");
+      recordBtn.disabled = false;
+      countdownEl.style.display = "none";
+      setStatus("ready", "Ready");
+    }
+  }
 }
 
 function stopRecording() {
-  if (!isRecording) return;
+  if (swingState === 'DISARMED' && !sessionActive) return;
   clearInterval(recordingTimer);
   isRecording = false;
+  swingState = 'DISARMED';
+  sessionActive = false;
+  preBuffer = []; elbowHistory = [];
   stopBtn.classList.remove("show");
   recOverlay.classList.remove("show");
   countdownEl.style.display = "none";
-  setStatus("ready","Ready");
-  log(`Captured ${liveFrames.length} frames`, liveFrames.length>=20?"ok":"warn");
-  if (liveFrames.length >= 20) analysisBtn.classList.add("show");
-  else { log("Too few frames — try again in better lighting","err"); recordBtn.disabled=false; }
+  recordBtn.disabled = false;
+  if (swingHistory.length > 0) {
+    setStatus("ready", "Ready — click Analyze");
+    log(`Session ended — ${swingHistory.length} swing${swingHistory.length > 1 ? 's' : ''} recorded`, "ok");
+    analysisBtn.classList.add("show");
+  } else {
+    setStatus("ready", "Ready");
+    log("No swings captured", "warn");
+  }
 }
 
 // ─────────────────────────────────────────
@@ -1281,10 +1438,53 @@ async function processUploadedVideo(file) {
 }
 
 // ─────────────────────────────────────────
+//  Multi-swing helpers
+// ─────────────────────────────────────────
+function averageNormSwings(normSwings) {
+  const avg = {};
+  for (const feat of FEATURES) {
+    const sum = new Float32Array(N_FRAMES);
+    const cnt = new Int32Array(N_FRAMES);
+    for (const ns of normSwings) {
+      const vals = ns[feat]; if (!vals) continue;
+      for (let i = 0; i < N_FRAMES; i++) {
+        if (!isNaN(vals[i])) { sum[i] += vals[i]; cnt[i]++; }
+      }
+    }
+    const arr = new Float32Array(N_FRAMES);
+    for (let i = 0; i < N_FRAMES; i++) arr[i] = cnt[i] > 0 ? sum[i] / cnt[i] : NaN;
+    avg[feat] = arr;
+  }
+  return avg;
+}
+
+function aggregateDeviations(results) {
+  const map = {};
+  for (const r of results) {
+    for (const dev of r.deviations) {
+      if (!map[dev.feature]) map[dev.feature] = { ...dev, _sev: 0, _delta: 0, _n: 0 };
+      map[dev.feature]._sev   += dev.severity;
+      map[dev.feature]._delta += dev.mean_delta;
+      map[dev.feature]._n++;
+    }
+  }
+  return Object.values(map)
+    .map(d => ({ ...d, severity: Math.round(d._sev / d._n * 10) / 10, mean_delta: Math.round(d._delta / d._n * 10) / 10 }))
+    .sort((a, b) => b.severity - a.severity);
+}
+
+function averagePhaseBar(results) {
+  const sum = new Float32Array(N_FRAMES);
+  for (const r of results) r.phaseBar.forEach((v, i) => { sum[i] += v; });
+  return Array.from(sum).map(s => s / results.length);
+}
+
+// ─────────────────────────────────────────
 //  Main analysis pipeline
 // ─────────────────────────────────────────
 async function runAnalysis() {
-  if (!liveFrames.length) return;
+  const source = swingHistory.length > 0 ? swingHistory : (liveFrames.length ? [liveFrames] : null);
+  if (!source) return;
   analysisBtn.classList.remove("show"); recordBtn.disabled=true;
   setStatus("processing","Analyzing swing...");
   resultsPlaceholder.style.display="none"; resultsContent.classList.add("show");
@@ -1302,11 +1502,24 @@ async function runAnalysis() {
   const model = activeModel();
   if (!model) { log("No reference model available","err"); return; }
 
-  log("Normalizing swing...");
-  const normSwing = normalizeSwing(liveFrames);
+  const n = source.length;
+  log(`Normalizing ${n} swing${n > 1 ? 's' : ''}...`);
+  const normSwings = source.map(frames => normalizeSwing(frames));
 
   log("Scoring against reference envelope...");
-  const { score, grade, in_envelope_pct, top3, deviations, phaseBar } = scoreSwing(normSwing, model);
+  const results = normSwings.map(ns => scoreSwing(ns, model));
+
+  const score = Math.round(results.reduce((s, r) => s + r.score, 0) / n);
+  const grade = score>=90?"A+":score>=85?"A":score>=80?"A-":score>=75?"B+":score>=70?"B":
+                score>=65?"B-":score>=60?"C+":score>=55?"C":score>=50?"C-":"D";
+  const in_envelope_pct = Math.round(results.reduce((s, r) => s + r.in_envelope_pct, 0) / n * 10) / 10;
+  const allDeviations = aggregateDeviations(results);
+  const top3 = allDeviations.slice(0, 3);
+  const avgNorm = averageNormSwings(normSwings);
+  const avgPhase = averagePhaseBar(results);
+  const avgTempoRatio = Math.round(
+    source.reduce((s, frames) => { const imp = detectImpactFrame(frames); return s + imp / Math.max(1, frames.length - imp); }, 0)
+    / n * 100) / 100;
 
   // Score ring — circumference = 2π×36 ≈ 226
   const offset = 226 * (1 - score/100);
@@ -1317,18 +1530,30 @@ async function runAnalysis() {
   document.getElementById("envelopeStat").textContent = `${in_envelope_pct}% frames within pro envelope`;
   const CLUB_LABELS = { driver:"🏌️ Driver", fairway_wood:"🌲 Fairway", long_iron:"⚙️ Long Iron", mid_iron:"🎯 Mid Iron", short_iron:"📐 Short Iron", wedge:"🔧 Wedge" };
   const clubLabel = CLUB_LABELS[selectedClub] || selectedClub.replace(/_/g," ");
-  document.getElementById("resultClubTag").textContent = `${clubLabel}  ·  ${model.n_swings} pro swings`;
+  document.getElementById("resultClubTag").textContent = `${clubLabel}  ·  ${model.n_swings} pro swings${n > 1 ? `  ·  avg of ${n} swings` : ''}`;
   setTimeout(() => { document.getElementById("scoreRingArc").style.strokeDashoffset = offset; }, 50);
 
+  // Per-swing score badges
+  const perSwingEl = document.getElementById("perSwingScores");
+  if (n > 1) {
+    perSwingEl.style.display = "block";
+    perSwingEl.innerHTML = results.map((r, i) => {
+      const c = r.score>=75?"#c9a84c":r.score>=50?"#e8b84b":"#d64f3e";
+      return `<span class="per-swing-badge" style="color:${c}">S${i+1} ${r.score}</span>`;
+    }).join('');
+  } else {
+    perSwingEl.style.display = "none";
+  }
+
   // Radar chart
-  renderRadar(normSwing, model);
+  renderRadar(avgNorm, model);
 
   // Feature comparison bars
-  renderFeatureBars(normSwing, model);
+  renderFeatureBars(avgNorm, model);
 
   // Phase timeline
   const barEl = document.getElementById("phaseBar");
-  phaseBar.forEach((q, i) => {
+  avgPhase.forEach((q, i) => {
     const seg = document.createElement("div");
     seg.className = `phase-seg ${q>=0.75?"good": q>=0.45?"ok":"bad"}`;
     seg.title = `Frame ${i}: ${(q*100).toFixed(0)}%`;
@@ -1338,7 +1563,7 @@ async function runAnalysis() {
 
   // Deviation list
   const devList = document.getElementById("deviationList");
-  deviations.forEach(dev => {
+  allDeviations.forEach(dev => {
     const item=document.createElement("div"); item.className="deviation-item";
     item.innerHTML=`
       <div class="deviation-header" onclick="this.parentElement.classList.toggle('open')">
@@ -1355,7 +1580,7 @@ async function runAnalysis() {
     devList.appendChild(item);
   });
 
-  log(`Score: ${score} (${grade})`, "ok");
+  log(`Score: ${score} (${grade})${n > 1 ? ` across ${n} swings` : ''}`, "ok");
   setStatus("ready","Ready"); recordBtn.disabled=false;
 
   // Claude coaching
@@ -1365,7 +1590,12 @@ async function runAnalysis() {
     const resp = await fetch("/api/feedback", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ score, grade, top_deviations:top3, in_envelope_pct, club_category:selectedClub, tempo_ratio: (()=>{ const imp=detectImpactFrame(liveFrames); return Math.round(imp/Math.max(1,liveFrames.length-imp)*100)/100; })() }),
+      body:JSON.stringify({
+        score, grade, top_deviations: top3, in_envelope_pct,
+        club_category: selectedClub, tempo_ratio: avgTempoRatio,
+        swing_count: n,
+        per_swing_scores: results.map(r => r.score),
+      }),
     });
     if (!resp.ok) { const e=await resp.json().catch(()=>({error:resp.statusText})); throw new Error(e.error||resp.statusText); }
     const coaching = await resp.json();

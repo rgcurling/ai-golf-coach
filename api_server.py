@@ -43,6 +43,7 @@ CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
 SYSTEM_PROMPT = """You are a PGA-certified golf instructor analyzing a student's swing biomechanics data.
 You will receive structured data showing how their swing deviates from professional benchmarks for a specific club.
+When multiple swings are provided, the deviations are averaged across all swings — focus on consistent patterns rather than one-off errors.
 Tailor your advice to the club being used — driver swings require more rotation and wider arc, iron swings require steeper attack angle and shaft lean, wedge swings require precision and controlled tempo.
 Respond with exactly 3 coaching points, one per deviation, in this JSON format:
 {
@@ -299,11 +300,13 @@ def feedback():
     if not data:
         return jsonify({"error": "Empty request body"}), 400
 
-    score       = data.get("score", 0)
-    grade       = data.get("grade", "?")
-    in_envelope = data.get("in_envelope_pct", 0)
-    deviations  = data.get("top_deviations", [])
-    tempo_ratio = data.get("tempo_ratio")
+    score        = data.get("score", 0)
+    grade        = data.get("grade", "?")
+    in_envelope  = data.get("in_envelope_pct", 0)
+    deviations   = data.get("top_deviations", [])
+    tempo_ratio  = data.get("tempo_ratio")
+    swing_count  = int(data.get("swing_count", 1))
+    per_swing_scores = data.get("per_swing_scores", [])
 
     # Accept both new club_category and legacy club_type
     club_category = data.get("club_category") or data.get("club_type", "driver")
@@ -347,11 +350,15 @@ def feedback():
         return jsonify(cached)
 
     # Build Claude prompt
+    swing_context = (
+        f"Swings analyzed: {swing_count} (individual scores: {', '.join(str(s) for s in per_swing_scores)})\n"
+        if swing_count > 1 else ""
+    )
     user_message = f"""Club: {club_label}
-Swing score: {score}/100 (Grade: {grade})
+{swing_context}Average swing score: {score}/100 (Grade: {grade})
 Frames within pro envelope: {in_envelope:.1f}%
 
-Top deviations from {club_label} professional benchmarks:
+Top deviations from {club_label} professional benchmarks{' (averaged across all swings)' if swing_count > 1 else ''}:
 """
     for i, dev in enumerate(deviations[:3], 1):
         user_message += (
