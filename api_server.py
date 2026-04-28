@@ -29,7 +29,8 @@ RATE_LIMIT  = 10
 RATE_WINDOW = 3600
 _rate_buckets: dict[str, list[float]] = defaultdict(list)
 
-FREE_DAILY_LIMIT = 5
+FREE_DAILY_LIMIT = 15
+BYPASS_IPS = {ip.strip() for ip in os.getenv("BYPASS_IPS", "").split(",") if ip.strip()}
 
 CLUB_CATEGORIES = ["driver", "fairway_wood", "long_iron", "mid_iron", "short_iron", "wedge"]
 
@@ -186,6 +187,8 @@ def store_supabase_cache(signature: str, response: dict):
 
 
 def check_daily_limit(user_ip: str) -> tuple[bool, int]:
+    if user_ip in BYPASS_IPS:
+        return True, 999
     if not _supabase:
         return True, FREE_DAILY_LIMIT
     try:
@@ -226,6 +229,8 @@ def store_swing(user_ip: str, data: dict, coaching: dict):
 
 
 def check_rate_limit(ip: str) -> bool:
+    if ip in BYPASS_IPS:
+        return True
     now = time.time()
     window_start = now - RATE_WINDOW
     _rate_buckets[ip] = [t for t in _rate_buckets[ip] if t > window_start]
